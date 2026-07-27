@@ -1,0 +1,69 @@
+name: pixiv_404
+description: "A third-party Pixiv client."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ---- 网络 ----
+  # 拦截器链是整个 API 层的骨架。刻意不用 QueuedInterceptorsWrapper
+  # （PixEz 用它做并发刷新去重，代价是把所有请求串行化）。
+  dio: ^5.11.0
+
+  # ---- 加密 ----
+  # MD5 → x-client-hash；SHA-256 → PKCE code_challenge。纯 Dart。
+  crypto: ^3.0.7
+
+  # ---- 认证 ----
+  # 同时覆盖 android + windows 的深链方案（uni_links 已停更且无 Windows 支持）。
+  app_links: ^6.3.2
+  # Android 的 inAppBrowserView 就是 Custom Tabs；Windows 用 externalApplication
+  # 拉起默认浏览器。走系统浏览器而非内嵌 WebView 是为了带真实指纹和已有 cookie，
+  # 显著降低 pixiv 的 reCAPTCHA 触发率（照抄 Shaft）。
+  url_launcher: ^6.3.2
+  # refresh_token 等价于永久密码：Android 走 Keystore，Windows 走凭据管理器(DPAPI)。
+  # PixEz 明文存 sqlite，在 Windows 上任何本地进程都能读到。
+  flutter_secure_storage: ^9.2.4
+  # Windows 注册 pixiv:// 协议（HKCU，不需要管理员权限）。
+  win32_registry: ^1.1.5
+
+  # ---- 存储 ----
+  # 选 drift 而非 sqflite：账号表需要真正的 schema 迁移框架（stepByStep + 迁移测试）。
+  drift: ^2.28.2
+  drift_flutter: ^0.2.8
+  path_provider: ^2.1.5
+
+  # ---- 状态 ----
+  # 仅 app/ 与 feature/ 层使用；lib/src/api/ 对它零感知。
+  flutter_riverpod: ^2.6.1
+  flutter_staggered_grid_view: ^0.7.0
+
+  # 模型全部手写 fromJson：pixiv 几乎每个字段都要走宽松转换器
+  # （user.id 在不同端点是 String / int 摇摆），codegen 加自定义 converter
+  # 的摩擦大于收益，也省掉 build_runner 对模型层的依赖。
+
+  # ---- 图片 ----
+  cached_network_image: ^3.4.1
+  archive: ^4.0.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  # 纯 Dart 测试（lib/src/api/ 不依赖 Flutter，可脱离 binding 直接跑）。
+  test: ^1.25.0
+  # 只为 drift 的 schema 生成服务。
+  build_runner: ^2.4.13
+  drift_dev: ^2.28.2
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/illust_mask.webp
