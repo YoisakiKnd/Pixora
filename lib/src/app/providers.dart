@@ -21,7 +21,7 @@ import '../data/pool/object_pool.dart';
 import '../data/search/search_history_repository.dart';
 import '../data/settings/settings_controller.dart';
 import '../platform/app_links_callback_source.dart';
-import '../platform/download_location.dart';
+import '../platform/download_storage.dart';
 import '../platform/secure_secret_store.dart';
 import '../platform/url_launcher_browser.dart';
 import '../widget/operation_feedback.dart';
@@ -88,12 +88,17 @@ final muteStoreProvider = ChangeNotifierProvider<MuteStore>((ref) {
   return store;
 });
 
+final downloadStorageProvider = Provider<DownloadStorage>(
+  (ref) => DownloadStorage(),
+);
+
 /// 下载队列。与账号无关（下载的是公开 CDN 资源），切换账号不重建。
 final downloadManagerProvider = ChangeNotifierProvider<DownloadManager>((ref) {
   final manager = DownloadManager(
     DriftDownloadRepository(ref.watch(appDatabaseProvider)),
     ref.watch(pixivClientsProvider).pximg,
-    resolveDownloadDirectory,
+    ref.watch(downloadStorageProvider),
+    () => ref.read(settingsControllerProvider).downloadPreferences,
   );
   // 恢复历史记录；完成后 notifyListeners 触发重建。
   unawaited(manager.restore());

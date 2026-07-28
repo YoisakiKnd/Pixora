@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../api/config/api_params.dart';
 import '../../api/pixiv_constants.dart';
 import '../db/app_database.dart';
+import '../download/download_naming.dart';
+import '../download/download_preferences.dart';
 
 enum AppThemeMode {
   system('自动检测'),
@@ -39,6 +41,7 @@ class AppPreferences {
     this.maskR18 = false,
     this.rankingPreferencesConfigured = false,
     this.rankingModes = defaultRankingModes,
+    this.downloadPreferences = const DownloadPreferences(),
   });
 
   static const defaultRankingModes = <RankingMode>[
@@ -55,6 +58,7 @@ class AppPreferences {
   final bool maskR18;
   final bool rankingPreferencesConfigured;
   final List<RankingMode> rankingModes;
+  final DownloadPreferences downloadPreferences;
 
   PixivLanguage get pixivLanguage =>
       PixivLanguage(uiTag: uiLanguage, contentTag: contentLanguage);
@@ -79,6 +83,11 @@ class DriftPreferencesRepository implements PreferencesRepository {
   static const rankingPreferencesConfiguredKey =
       'settings.ranking_preferences_configured';
   static const rankingModesKey = 'settings.ranking_modes';
+  static const downloadLocationKey = 'settings.download_location';
+  static const downloadFileNameTemplateKey =
+      'settings.download_filename_template';
+  static const downloadCategoryTemplateKey =
+      'settings.download_category_template';
 
   @override
   Future<AppPreferences> load() async {
@@ -93,6 +102,9 @@ class DriftPreferencesRepository implements PreferencesRepository {
                 maskR18Key,
                 rankingPreferencesConfiguredKey,
                 rankingModesKey,
+                downloadLocationKey,
+                downloadFileNameTemplateKey,
+                downloadCategoryTemplateKey,
               ]),
             ))
             .get();
@@ -118,6 +130,17 @@ class DriftPreferencesRepository implements PreferencesRepository {
       rankingModes: rankingModes.isEmpty
           ? AppPreferences.defaultRankingModes
           : rankingModes,
+      downloadPreferences: DownloadPreferences(
+        location: DownloadLocationPreference.decode(
+          values[downloadLocationKey],
+        ),
+        fileNameTemplate:
+            values[downloadFileNameTemplateKey] ??
+            DownloadPreferences.defaultFileNameTemplate,
+        categoryTemplate:
+            values[downloadCategoryTemplateKey] ??
+            DownloadPreferences.defaultCategoryTemplate,
+      ),
     );
   }
 
@@ -166,6 +189,7 @@ class SettingsController extends ChangeNotifier {
   bool _maskR18 = false;
   bool _rankingPreferencesConfigured = false;
   List<RankingMode> _rankingModes = AppPreferences.defaultRankingModes;
+  DownloadPreferences _downloadPreferences = const DownloadPreferences();
 
   AppThemeMode get themeMode => _themeMode;
   String get uiLanguage => _uiLanguage;
@@ -174,6 +198,7 @@ class SettingsController extends ChangeNotifier {
   bool get maskR18 => _maskR18;
   bool get rankingPreferencesConfigured => _rankingPreferencesConfigured;
   List<RankingMode> get rankingModes => List.unmodifiable(_rankingModes);
+  DownloadPreferences get downloadPreferences => _downloadPreferences;
 
   Future<void> load() async {
     final preferences = await _repository.load();
@@ -184,6 +209,7 @@ class SettingsController extends ChangeNotifier {
     _maskR18 = preferences.maskR18;
     _rankingPreferencesConfigured = preferences.rankingPreferencesConfigured;
     _rankingModes = List.of(preferences.rankingModes);
+    _downloadPreferences = preferences.downloadPreferences;
     _onLanguageChanged(preferences.pixivLanguage);
     notifyListeners();
   }
@@ -254,6 +280,27 @@ class SettingsController extends ChangeNotifier {
       _repository.write(
         DriftPreferencesRepository.rankingPreferencesConfiguredKey,
         'true',
+      ),
+    ]);
+  }
+
+  Future<void> setDownloadPreferences(DownloadPreferences value) async {
+    DownloadNaming.validateFileNameTemplate(value.fileNameTemplate);
+    DownloadNaming.validateCategoryTemplate(value.categoryTemplate);
+    _downloadPreferences = value;
+    notifyListeners();
+    await Future.wait([
+      _repository.write(
+        DriftPreferencesRepository.downloadLocationKey,
+        value.location.encode(),
+      ),
+      _repository.write(
+        DriftPreferencesRepository.downloadFileNameTemplateKey,
+        value.fileNameTemplate,
+      ),
+      _repository.write(
+        DriftPreferencesRepository.downloadCategoryTemplateKey,
+        value.categoryTemplate,
       ),
     ]);
   }

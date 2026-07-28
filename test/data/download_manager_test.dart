@@ -6,7 +6,9 @@ import 'package:dio/dio.dart';
 import 'package:pixora/src/api/client/pximg_client.dart';
 import 'package:pixora/src/api/model/illust/illust.dart';
 import 'package:pixora/src/data/download/download_manager.dart';
+import 'package:pixora/src/data/download/download_preferences.dart';
 import 'package:pixora/src/data/download/download_task.dart';
+import 'package:pixora/src/platform/download_storage.dart';
 import 'package:test/test.dart';
 
 /// 可控的假取流器：URL 装上 gate 后会阻塞到手动放行，用来测并发与取消。
@@ -104,7 +106,13 @@ void main() {
   DownloadManager makeManager({int maxConcurrent = 3}) => DownloadManager(
     repository,
     fetcher,
-    () async => tempDir.path,
+    DownloadStorage(temporaryDirectoryResolver: () async => tempDir),
+    () => DownloadPreferences(
+      location: DownloadLocationPreference.fileSystem(
+        path: tempDir.path,
+        label: tempDir.path,
+      ),
+    ),
     maxConcurrent: maxConcurrent,
   );
 
@@ -123,37 +131,8 @@ void main() {
   DownloadTask taskOf(DownloadManager m, int id, int page) =>
       m.tasks.firstWhere((t) => t.illustId == id && t.page == page);
 
-  group('文件名推导', () {
-    test('采用 URL 末段（pixiv 原图本身就是 id_pN.ext）', () {
-      expect(
-        downloadFileName(urlOf(42, 0), illustId: 42, page: 0),
-        '42_p0.png',
-      );
-    });
-
-    test('异常 URL 兜底为 id_pN.jpg', () {
-      expect(downloadFileName('not a url', illustId: 7, page: 2), '7_p2.jpg');
-      expect(
-        downloadFileName('https://x.com/', illustId: 7, page: 0),
-        '7_p0.jpg',
-      );
-      // 末段没有扩展名。
-      expect(
-        downloadFileName('https://x.com/abc', illustId: 7, page: 1),
-        '7_p1.jpg',
-      );
-    });
-
-    test('非法字符清洗成下划线', () {
-      expect(
-        downloadFileName('https://x.com/a%20b:c.png', illustId: 1, page: 0),
-        'a_b_c.png',
-      );
-    });
-  });
-
   group('入队与完成', () {
-    test('单图：下载完成，.part 改名为成品文件', () async {
+    test('单图：临时下载完成后提交为成品文件', () async {
       final manager = makeManager();
       fetcher.payloads[urlOf(1, 0)] = [9, 9, 9];
 
@@ -212,10 +191,9 @@ void main() {
       expect(await manager.enqueueIllust(bare), 0);
     });
 
-    test('文件已存在时直接完成，不发请求', () async {
+    test('同名文件已存在时保留旧文件并追加序号', () async {
       final manager = makeManager();
-      final path =
-          '${tempDir.path}${Platform.pathSeparator}${downloadFileName(urlOf(5, 0), illustId: 5, page: 0)}';
+      final path = '${tempDir.path}${Platform.pathSeparator}5_p0.png';
       await File(path).writeAsBytes([7]);
 
       await manager.enqueueIllust(singlePage(5));
@@ -223,7 +201,10 @@ void main() {
         () => taskOf(manager, 5, 0).status == DownloadStatus.done,
         reason: '已存在快路径',
       );
-      expect(fetcher.downloadCalls, 0);
+      expect(fetcher.downloadCalls, 1);
+      final task = taskOf(manager, 5, 0);
+      expect(task.savePath, contains('5_p0 (1).png'));
+      expect(await File(path).readAsBytes(), [7]);
     });
   });
 
@@ -312,7 +293,7 @@ void main() {
   group('持久化与恢复', () {
     test('状态迁移写入仓库；重启后未完成任务恢复为 failed', () async {
       final manager = makeManager();
-      fetcher.gate(urlOf(9, 0));
+      final gate = fetcher.gate(urlOf(9, 0));
       await manager.enqueueIllust(singlePage(9));
       await waitFor(
         () => taskOf(manager, 9, 0).status == DownloadStatus.running,
@@ -326,6 +307,12 @@ void main() {
       final task = taskOf(restored, 9, 0);
       expect(task.status, DownloadStatus.failed);
       expect(task.error, contains('中断'));
+
+      gate.complete();
+      await waitFor(
+        () => taskOf(manager, 9, 0).status == DownloadStatus.done,
+        reason: '释放模拟中的旧进程任务',
+      );
     });
 
     test('done 记录原样恢复；clearFinished 只清已结束的', () async {

@@ -11,6 +11,7 @@ import '../../widget/user_hint.dart';
 import '../auth/account_switch_sheet.dart';
 import '../download/downloads_page.dart';
 import '../mute/mute_settings_page.dart';
+import 'download_settings_page.dart';
 import 'ranking_preferences_page.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -130,6 +131,17 @@ class SettingsPage extends ConsumerWidget {
                 ),
               ),
               _NavigationTile(
+                icon: Icons.save_alt_outlined,
+                title: '下载设置',
+                subtitle: '保存目录、分类子目录和文件名模板',
+                value: settings.downloadPreferences.categoryPreset.label,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DownloadSettingsPage(),
+                  ),
+                ),
+              ),
+              _NavigationTile(
                 icon: Icons.download_outlined,
                 title: '下载管理',
                 subtitle: '查看下载任务、进度和保存位置；失败时优先检查代理',
@@ -167,7 +179,7 @@ class SettingsPage extends ConsumerWidget {
                 leading: _SettingIcon(Icons.info_outline),
                 title: Text('Pixora · 绘光'),
                 subtitle: Text('第三方 Pixiv 客户端 · Android / Windows'),
-                trailing: Text('v1.2.1'),
+                trailing: Text('v1.2.2'),
               ),
               ListTile(
                 leading: _SettingIcon(Icons.security_outlined),

@@ -9,6 +9,7 @@ import '../../data/download/download_task.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../illust/illust_detail_page.dart';
+import '../settings/download_settings_page.dart';
 
 /// 下载管理页。
 class DownloadsPage extends ConsumerWidget {
@@ -23,6 +24,13 @@ class DownloadsPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('下载'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: '下载设置',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DownloadSettingsPage()),
+            ),
+          ),
           if (tasks.any((t) => t.isFinished))
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
@@ -60,6 +68,7 @@ class _TaskTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final manager = ref.read(downloadManagerProvider);
+    final storage = ref.read(downloadStorageProvider);
     final theme = Theme.of(context);
 
     return ListTile(
@@ -74,7 +83,7 @@ class _TaskTile extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: _subtitle(theme),
+      subtitle: _subtitle(theme, storage.displayPath(task.savePath)),
       trailing: _actions(manager),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
@@ -84,7 +93,7 @@ class _TaskTile extends ConsumerWidget {
     );
   }
 
-  Widget _subtitle(ThemeData theme) {
+  Widget _subtitle(ThemeData theme, String displayPath) {
     switch (task.status) {
       case DownloadStatus.running:
         return Padding(
@@ -102,11 +111,7 @@ class _TaskTile extends ConsumerWidget {
         return const Text('排队中');
       case DownloadStatus.done:
         // 点标题进详情，点路径开资源管理器（仅 Windows 实现）。
-        return Text(
-          task.savePath,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
+        return Text(displayPath, maxLines: 1, overflow: TextOverflow.ellipsis);
       case DownloadStatus.failed:
         return Text(
           '失败：${task.error ?? '未知错误'}。可点右侧重试；若持续失败请检查代理 / VPN',

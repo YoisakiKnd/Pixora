@@ -1,11 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../api/client/pximg_client.dart';
 import '../../api/model/illust/illust.dart';
+import '../../platform/download_storage.dart';
+import 'download_naming.dart';
+import 'download_preferences.dart';
 import 'download_task.dart';
 
 /// 下载记录的持久化。
@@ -49,21 +51,21 @@ class InMemoryDownloadRepository implements DownloadRepository {
 ///   只在状态迁移时持久化，进度是内存态。
 /// * **上次退出时没跑完的任务恢复成 failed 而不是自动续跑** ——
 ///   自动续跑会在用户不知情时吃流量，让用户自己点重试。
-/// * **写入走 `.part` 再改名**：崩溃 / 断电只会留下 .part 半截文件，
-///   不会有「看起来存在但其实不完整」的成品文件被完成检查误判。
+/// * **先写临时文件再提交目标**：崩溃 / 断电不会留下伪装成成品的半截文件；
+///   Windows 原子改名，Android 完成后再发布到 MediaStore / SAF。
 class DownloadManager extends ChangeNotifier {
   DownloadManager(
     this._repository,
     this._fetcher,
-    this._resolveDirectory, {
+    this._storage,
+    this._readPreferences, {
     this.maxConcurrent = 3,
   });
 
   final DownloadRepository _repository;
   final PximgFetcher _fetcher;
-
-  /// 平台注入（Windows 下载目录 / Android 应用外部目录），见 platform/。
-  final Future<String> Function() _resolveDirectory;
+  final DownloadStorage _storage;
+  final DownloadPreferences Function() _readPreferences;
 
   final int maxConcurrent;
 
@@ -108,7 +110,8 @@ class DownloadManager extends ChangeNotifier {
     final urls = illust.originalImageUrls;
     if (urls.isEmpty) return 0;
 
-    final dir = await _resolveDirectory();
+    final preferences = _readPreferences();
+    final location = await _storage.resolveLocation(preferences.location);
     var added = 0;
     for (var page = 0; page < urls.length; page++) {
       final key = taskKey(illust.id, page);
@@ -116,14 +119,26 @@ class DownloadManager extends ChangeNotifier {
       if (existing != null && !existing.canRetry) continue;
 
       final url = urls[page];
+      final nameContext = DownloadNameContext.fromIllust(illust, page);
+      final fileName = DownloadNaming.fileName(
+        template: preferences.fileNameTemplate,
+        context: nameContext,
+        sourceUrl: url,
+      );
+      final categorySegments = DownloadNaming.categorySegments(
+        template: preferences.categoryTemplate,
+        context: nameContext,
+      );
+      final savePath = await _storage.createStoredDestination(
+        location: location,
+        relativeSegments: categorySegments,
+        fileName: fileName,
+      );
       final task = DownloadTask(
         illustId: illust.id,
         page: page,
         url: url,
-        savePath: _join(
-          dir,
-          downloadFileName(url, illustId: illust.id, page: page),
-        ),
+        savePath: savePath,
         title: illust.title,
         userName: illust.user.name,
         thumbnailUrl: illust.imageUrls.thumbnail,
@@ -228,27 +243,23 @@ class DownloadManager extends ChangeNotifier {
 
   Future<void> _run(DownloadTask task) async {
     final token = _cancelTokens[task.key] = CancelToken();
-    final partPath = '${task.savePath}.part';
+    String? temporaryPath;
     try {
-      final file = File(task.savePath);
-      // 文件已在（此前会话下载完成后记录被清掉、或重复入队）：直接算完成。
-      // .part 半截文件不会走到这里 —— 完成时才改名。
-      if (await file.exists()) {
-        _finish(task, DownloadStatus.done);
-        return;
-      }
-      await file.parent.create(recursive: true);
-
+      temporaryPath = await _storage.createTemporaryPath(task.key);
       await _fetcher.downloadToFile(
         task.url,
-        partPath,
+        temporaryPath,
         cancelToken: token,
         onProgress: (received, total) => _onProgress(task, received, total),
       );
-      await File(partPath).rename(task.savePath);
+      final committed = await _storage.commit(temporaryPath, task.savePath);
+      await _storage.deleteTemporary(temporaryPath);
+      task.savePath = committed.storedDestination;
       _finish(task, DownloadStatus.done);
     } on DioException catch (e) {
-      await _deleteQuietly(partPath);
+      if (temporaryPath != null) {
+        await _storage.deleteTemporary(temporaryPath);
+      }
       if (e.type == DioExceptionType.cancel) {
         _finish(task, DownloadStatus.canceled);
       } else {
@@ -256,7 +267,9 @@ class DownloadManager extends ChangeNotifier {
         _finish(task, DownloadStatus.failed);
       }
     } catch (e) {
-      await _deleteQuietly(partPath);
+      if (temporaryPath != null) {
+        await _storage.deleteTemporary(temporaryPath);
+      }
       task.error = '$e';
       _finish(task, DownloadStatus.failed);
     }
@@ -283,15 +296,6 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
-  static Future<void> _deleteQuietly(String path) async {
-    try {
-      final f = File(path);
-      if (await f.exists()) await f.delete();
-    } catch (_) {
-      // 清理失败不影响任务状态。
-    }
-  }
-
   static String _describe(DioException e) => switch (e.type) {
     DioExceptionType.connectionTimeout ||
     DioExceptionType.receiveTimeout ||
@@ -299,9 +303,4 @@ class DownloadManager extends ChangeNotifier {
     DioExceptionType.badResponse => 'HTTP ${e.response?.statusCode ?? '错误'}',
     _ => '网络错误',
   };
-
-  static String _join(String dir, String name) {
-    final sep = Platform.pathSeparator;
-    return dir.endsWith(sep) ? '$dir$name' : '$dir$sep$name';
-  }
 }

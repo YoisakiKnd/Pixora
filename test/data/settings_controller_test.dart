@@ -2,6 +2,8 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:pixora/src/api/config/api_params.dart';
 import 'package:pixora/src/data/db/app_database.dart';
+import 'package:pixora/src/data/download/download_naming.dart';
+import 'package:pixora/src/data/download/download_preferences.dart';
 import 'package:pixora/src/data/settings/settings_controller.dart';
 import 'package:test/test.dart';
 
@@ -134,5 +136,62 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
     expect(controller.rankingModes, AppPreferences.defaultRankingModes);
+  });
+
+  test('新安装使用默认下载目录、原图命名且不分类', () async {
+    final preferences = await repository.load();
+
+    expect(preferences.downloadPreferences.location.isDefault, isTrue);
+    expect(
+      preferences.downloadPreferences.fileNameTemplate,
+      DownloadPreferences.defaultFileNameTemplate,
+    );
+    expect(preferences.downloadPreferences.categoryTemplate, isEmpty);
+  });
+
+  test('下载位置和模板可通过控制器持久化', () async {
+    final controller = SettingsController(repository, (_) {});
+    await controller.load();
+    const expected = DownloadPreferences(
+      location: DownloadLocationPreference.fileSystem(
+        path: r'C:\Pictures\Pixora',
+        label: r'C:\Pictures\Pixora',
+      ),
+      fileNameTemplate: '{author}_{id}_p{page}',
+      categoryTemplate: '{type}/{year}',
+    );
+
+    await controller.setDownloadPreferences(expected);
+
+    expect(
+      controller.downloadPreferences.fileNameTemplate,
+      expected.fileNameTemplate,
+    );
+    final restored = await repository.load();
+    expect(restored.downloadPreferences.location, expected.location);
+    expect(
+      restored.downloadPreferences.fileNameTemplate,
+      expected.fileNameTemplate,
+    );
+    expect(
+      restored.downloadPreferences.categoryTemplate,
+      expected.categoryTemplate,
+    );
+  });
+
+  test('下载模板无效时不会覆盖当前设置', () async {
+    final controller = SettingsController(repository, (_) {});
+    await controller.load();
+
+    await expectLater(
+      controller.setDownloadPreferences(
+        const DownloadPreferences(fileNameTemplate: '{missing}'),
+      ),
+      throwsA(isA<DownloadTemplateException>()),
+    );
+    expect(
+      controller.downloadPreferences.fileNameTemplate,
+      DownloadPreferences.defaultFileNameTemplate,
+    );
   });
 }

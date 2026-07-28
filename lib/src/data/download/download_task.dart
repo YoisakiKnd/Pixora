@@ -39,9 +39,9 @@ class DownloadTask {
 
   final String url;
 
-  /// 完整保存路径。入队时就定死 —— 用户之后改下载目录不影响已入队任务，
-  /// 历史记录也始终指向文件的真实位置。
-  final String savePath;
+  /// 完整保存目标。Windows 与旧记录是绝对路径；Android 公共目录和 SAF
+  /// 使用可持久化的目标描述。入队时确定，提交时可能因同名冲突追加序号。
+  String savePath;
 
   /// 展示信息在入队时快照。作品之后被删除 / 私密化，记录页仍能辨认。
   final String title;
@@ -75,26 +75,3 @@ class DownloadTask {
 }
 
 String taskKey(int illustId, int page) => '$illustId:$page';
-
-/// 从原图 URL 推导保存文件名。
-///
-/// pixiv 原图 URL 的末段本身就是 `{id}_p{n}.{ext}`（如 `131905683_p0.png`），
-/// 直接采用 —— 这与官方网页端下载、PixEz 的默认命名一致，扩展名也天然正确
-/// （原图有 png / jpg 两种，从 URL 之外无法得知）。
-///
-/// 末段异常（无扩展名、含非法字符清洗后为空）时兜底为 `{id}_p{n}.jpg`。
-String downloadFileName(
-  String url, {
-  required int illustId,
-  required int page,
-}) {
-  final segments = Uri.tryParse(url)?.pathSegments;
-  final base = (segments == null || segments.isEmpty) ? '' : segments.last;
-  // Windows 文件名非法字符（\ / : * ? " < > |）以及其他控制字符统一换成下划线。
-  final sanitized = base.replaceAll(RegExp(r'[^\w.\-]'), '_');
-  final dot = sanitized.lastIndexOf('.');
-  if (dot <= 0 || dot == sanitized.length - 1) {
-    return '${illustId}_p$page.jpg';
-  }
-  return sanitized;
-}
