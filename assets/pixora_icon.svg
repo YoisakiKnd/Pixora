@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Pixora · 绘光</title>
+  <desc id="desc">浅灰绿磁贴上的光窗与画幅符号</desc>
+
+  <!-- 外层磁贴 -->
+  <rect x="64" y="64" width="896" height="896" rx="180" fill="#E8ECDF"/>
+
+  <!-- 内层沉色底板，形成磁贴厚度 -->
+  <rect x="168" y="168" width="688" height="688" rx="128" fill="#D5DEC8"/>
+
+  <!-- 主画幅：居中圆角画框 -->
+  <rect x="268" y="248" width="488" height="528" rx="72" fill="#79A85B"/>
+
+  <!-- 画幅内的浅色“光窗”竖条，像被光照亮的画面 -->
+  <rect x="332" y="312" width="148" height="400" rx="36" fill="#F4F7EF"/>
+
+  <!-- 右上角光点：绘光 -->
+  <circle cx="668" cy="332" r="48" fill="#F2D49B"/>
+
+  <!-- 右下辅助光条，平衡构图 -->
+  <rect x="520" y="560" width="160" height="56" rx="28" fill="#F4F7EF" opacity="0.92"/>
+</svg>

@@ -15,6 +15,37 @@ void main() {
 
   tearDown(() => database.close());
 
+  test('新安装默认使用 Pixora 主推色', () async {
+    final preferences = await repository.load();
+    expect(preferences.themeMode, AppThemeMode.pixora);
+  });
+
+  test('主题模式可持久化读取', () async {
+    for (final mode in AppThemeMode.values) {
+      await repository.write(
+        DriftPreferencesRepository.themeModeKey,
+        mode.name,
+      );
+      final preferences = await repository.load();
+      expect(preferences.themeMode, mode);
+    }
+  });
+
+  test('旧版主题设置保持兼容', () async {
+    for (final mode in [
+      AppThemeMode.system,
+      AppThemeMode.light,
+      AppThemeMode.dark,
+    ]) {
+      await repository.write(
+        DriftPreferencesRepository.themeModeKey,
+        mode.name,
+      );
+      final preferences = await repository.load();
+      expect(preferences.themeMode, mode);
+    }
+  });
+
   test('新安装默认收藏按钮位于左上角', () async {
     final preferences = await repository.load();
     expect(preferences.bookmarkButtonCorner, BookmarkButtonCorner.topLeft);

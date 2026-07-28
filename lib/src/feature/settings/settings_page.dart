@@ -42,7 +42,7 @@ class SettingsPage extends ConsumerWidget {
               _NavigationTile(
                 icon: Icons.brightness_6_outlined,
                 title: '主题模式',
-                subtitle: '控制应用的明暗外观',
+                subtitle: '自动检测、白天、黑夜或 Pixora 主推色',
                 value: _themeLabel(settings.themeMode),
                 onTap: () => _chooseTheme(context, settings),
               ),
@@ -152,7 +152,7 @@ class SettingsPage extends ConsumerWidget {
                 leading: _SettingIcon(Icons.info_outline),
                 title: Text('Pixora · 绘光'),
                 subtitle: Text('第三方 Pixiv 客户端 · Android / Windows'),
-                trailing: Text('v1.0.0'),
+                trailing: Text('v1.1.0'),
               ),
               ListTile(
                 leading: _SettingIcon(Icons.security_outlined),
@@ -166,11 +166,7 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  static String _themeLabel(ThemeMode mode) => switch (mode) {
-    ThemeMode.system => '跟随系统',
-    ThemeMode.light => '浅色',
-    ThemeMode.dark => '深色',
-  };
+  static String _themeLabel(AppThemeMode mode) => mode.label;
 
   static String _languageLabel(String code) {
     for (final (value, label) in _languages) {
@@ -218,11 +214,11 @@ class SettingsPage extends ConsumerWidget {
     BuildContext context,
     SettingsController settings,
   ) async {
-    final selected = await showModalBottomSheet<ThemeMode>(
+    final selected = await showModalBottomSheet<AppThemeMode>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: RadioGroup<ThemeMode>(
+        child: RadioGroup<AppThemeMode>(
           groupValue: settings.themeMode,
           onChanged: (value) => Navigator.of(context).pop(value),
           child: Column(
@@ -233,11 +229,17 @@ class SettingsPage extends ConsumerWidget {
                   '主题模式',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
+                subtitle: Text('Pixora 主推色为默认主题'),
               ),
-              for (final mode in ThemeMode.values)
-                RadioListTile<ThemeMode>(
+              for (final mode in AppThemeMode.values)
+                RadioListTile<AppThemeMode>(
                   value: mode,
                   title: Text(_themeLabel(mode)),
+                  subtitle: mode == AppThemeMode.system
+                      ? const Text('根据系统设置自动切换白天与黑夜')
+                      : mode == AppThemeMode.pixora
+                      ? const Text('浅灰绿色品牌主题')
+                      : null,
                 ),
             ],
           ),

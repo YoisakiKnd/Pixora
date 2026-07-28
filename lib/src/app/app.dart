@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth/auth_state.dart';
+import '../data/settings/settings_controller.dart';
 import '../feature/auth/login_page.dart';
 import '../feature/auth/policy_agreement_page.dart';
 import '../feature/home/home_page.dart';
@@ -16,21 +17,54 @@ class PixivApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
+    const seed = Color(0xFF79A85B);
     final lightScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0096FA),
-      surface: const Color(0xFFF7F8FA),
+      seedColor: seed,
+      surface: const Color(0xFFF8FAF5),
     );
     final darkScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0096FA),
+      seedColor: seed,
       brightness: Brightness.dark,
-      surface: const Color(0xFF101214),
+      surface: const Color(0xFF141812),
     );
+    final pixoraScheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      surface: const Color(0xFFE8ECDF),
+      surfaceContainerLowest: const Color(0xFFF8FAF5),
+      surfaceContainerLow: const Color(0xFFF1F4EB),
+      surfaceContainer: const Color(0xFFE2E8D8),
+      surfaceContainerHigh: const Color(0xFFD5DEC8),
+      primaryContainer: const Color(0xFFC8DBB8),
+      onPrimaryContainer: const Color(0xFF20301E),
+    );
+    final (themeMode, theme, darkTheme) = switch (settings.themeMode) {
+      AppThemeMode.system => (
+        ThemeMode.system,
+        _theme(lightScheme),
+        _theme(darkScheme),
+      ),
+      AppThemeMode.light => (
+        ThemeMode.light,
+        _theme(lightScheme),
+        _theme(darkScheme),
+      ),
+      AppThemeMode.dark => (
+        ThemeMode.dark,
+        _theme(lightScheme),
+        _theme(darkScheme),
+      ),
+      AppThemeMode.pixora => (
+        ThemeMode.light,
+        _theme(pixoraScheme),
+        _theme(darkScheme),
+      ),
+    };
     return MaterialApp(
       title: 'Pixora',
       debugShowCheckedModeBanner: false,
-      theme: _theme(lightScheme),
-      darkTheme: _theme(darkScheme),
-      themeMode: settings.themeMode,
+      theme: theme,
+      darkTheme: darkTheme,
+      themeMode: themeMode,
       scrollBehavior: const _DesktopScrollBehavior(),
       home: AuthGate(protocolRegistered: protocolRegistered),
     );

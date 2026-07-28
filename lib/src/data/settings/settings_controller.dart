@@ -4,6 +4,17 @@ import 'package:flutter/material.dart';
 import '../../api/pixiv_constants.dart';
 import '../db/app_database.dart';
 
+enum AppThemeMode {
+  system('自动检测'),
+  light('白天'),
+  dark('黑夜'),
+  pixora('Pixora 主推色');
+
+  const AppThemeMode(this.label);
+
+  final String label;
+}
+
 enum BookmarkButtonCorner {
   topLeft('左上角'),
   topRight('右上角'),
@@ -20,14 +31,14 @@ enum BookmarkButtonCorner {
 
 class AppPreferences {
   const AppPreferences({
-    this.themeMode = ThemeMode.system,
+    this.themeMode = AppThemeMode.pixora,
     this.uiLanguage = 'zh-CN',
     this.contentLanguage = 'zh-CN',
     this.bookmarkButtonCorner = BookmarkButtonCorner.topLeft,
     this.maskR18 = false,
   });
 
-  final ThemeMode themeMode;
+  final AppThemeMode themeMode;
   final String uiLanguage;
   final String contentLanguage;
   final BookmarkButtonCorner bookmarkButtonCorner;
@@ -70,9 +81,14 @@ class DriftPreferencesRepository implements PreferencesRepository {
             .get();
     final values = {for (final row in rows) row.key: row.value};
     return AppPreferences(
-      themeMode: ThemeMode.values.firstWhere(
+      themeMode: AppThemeMode.values.firstWhere(
         (mode) => mode.name == values[themeModeKey],
-        orElse: () => ThemeMode.system,
+        orElse: () => switch (values[themeModeKey]) {
+          'system' => AppThemeMode.system,
+          'light' => AppThemeMode.light,
+          'dark' => AppThemeMode.dark,
+          _ => AppThemeMode.pixora,
+        },
       ),
       uiLanguage: values[uiLanguageKey] ?? 'zh-CN',
       contentLanguage: values[contentLanguageKey] ?? 'zh-CN',
@@ -110,13 +126,13 @@ class SettingsController extends ChangeNotifier {
   final PreferencesRepository _repository;
   final ValueChanged<PixivLanguage> _onLanguageChanged;
 
-  ThemeMode _themeMode = ThemeMode.system;
+  AppThemeMode _themeMode = AppThemeMode.pixora;
   String _uiLanguage = 'zh-CN';
   String _contentLanguage = 'zh-CN';
   BookmarkButtonCorner _bookmarkButtonCorner = BookmarkButtonCorner.topLeft;
   bool _maskR18 = false;
 
-  ThemeMode get themeMode => _themeMode;
+  AppThemeMode get themeMode => _themeMode;
   String get uiLanguage => _uiLanguage;
   String get contentLanguage => _contentLanguage;
   BookmarkButtonCorner get bookmarkButtonCorner => _bookmarkButtonCorner;
@@ -133,7 +149,7 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setThemeMode(ThemeMode value) async {
+  Future<void> setThemeMode(AppThemeMode value) async {
     if (_themeMode == value) return;
     _themeMode = value;
     notifyListeners();
