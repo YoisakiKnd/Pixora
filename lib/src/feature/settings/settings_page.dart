@@ -167,7 +167,7 @@ class SettingsPage extends ConsumerWidget {
                 leading: _SettingIcon(Icons.info_outline),
                 title: Text('Pixora · 绘光'),
                 subtitle: Text('第三方 Pixiv 客户端 · Android / Windows'),
-                trailing: Text('v1.2.0'),
+                trailing: Text('v1.2.1'),
               ),
               ListTile(
                 leading: _SettingIcon(Icons.security_outlined),
