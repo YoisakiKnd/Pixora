@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:pixiv_404/src/feature/illust/ugoira_frames.dart';
+import 'package:pixora/src/feature/illust/ugoira_frames.dart';
 import 'package:test/test.dart';
 
 /// 在内存里现造一个 zip，[entries] 的键为文件名、值为内容。

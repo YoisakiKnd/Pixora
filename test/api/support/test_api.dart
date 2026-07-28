@@ -1,5 +1,5 @@
-import 'package:pixiv_404/src/api/client/dio_factory.dart';
-import 'package:pixiv_404/src/api/pixiv_api.dart';
+import 'package:pixora/src/api/client/dio_factory.dart';
+import 'package:pixora/src/api/pixiv_api.dart';
 
 import 'recording_adapter.dart';
 

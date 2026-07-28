@@ -1,5 +1,5 @@
-import 'package:pixiv_404/src/api/auth/refresh_token_input.dart';
-import 'package:pixiv_404/src/api/pixiv_exception.dart';
+import 'package:pixora/src/api/auth/refresh_token_input.dart';
+import 'package:pixora/src/api/pixiv_exception.dart';
 import 'package:test/test.dart';
 
 void main() {

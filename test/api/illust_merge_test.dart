@@ -1,4 +1,4 @@
-import 'package:pixiv_404/src/api/model/illust/illust.dart';
+import 'package:pixora/src/api/model/illust/illust.dart';
 import 'package:test/test.dart';
 
 /// 列表接口返回的精简对象。

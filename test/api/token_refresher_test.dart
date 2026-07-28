@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:pixiv_404/src/api/auth/token_refresher.dart';
-import 'package:pixiv_404/src/api/client/token_endpoint.dart';
-import 'package:pixiv_404/src/api/model/auth/auth_user.dart';
-import 'package:pixiv_404/src/api/model/auth/pixiv_token.dart';
-import 'package:pixiv_404/src/api/pixiv_exception.dart';
+import 'package:pixora/src/api/auth/token_refresher.dart';
+import 'package:pixora/src/api/client/token_endpoint.dart';
+import 'package:pixora/src/api/model/auth/auth_user.dart';
+import 'package:pixora/src/api/model/auth/pixiv_token.dart';
+import 'package:pixora/src/api/pixiv_exception.dart';
 import 'package:test/test.dart';
 
 /// 可控的假端点：记录调用次数，并允许手动决定何时完成。

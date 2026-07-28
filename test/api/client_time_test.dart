@@ -1,4 +1,4 @@
-import 'package:pixiv_404/src/api/auth/client_time.dart';
+import 'package:pixora/src/api/auth/client_time.dart';
 import 'package:test/test.dart';
 
 void main() {

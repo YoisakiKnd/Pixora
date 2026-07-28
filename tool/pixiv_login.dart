@@ -10,10 +10,10 @@
 
 import 'dart:io';
 
-import 'package:pixiv_404/src/api/auth/pkce.dart';
-import 'package:pixiv_404/src/api/client/dio_factory.dart';
-import 'package:pixiv_404/src/api/pixiv_api.dart';
-import 'package:pixiv_404/src/dev/dotenv.dart';
+import 'package:pixora/src/api/auth/pkce.dart';
+import 'package:pixora/src/api/client/dio_factory.dart';
+import 'package:pixora/src/api/pixiv_api.dart';
+import 'package:pixora/src/dev/dotenv.dart';
 
 Future<void> main(List<String> args) async {
   final proxy = _argValue(args, '--proxy') ?? DotEnv.get('PIXIV_PROXY');

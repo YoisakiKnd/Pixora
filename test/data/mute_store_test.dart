@@ -1,6 +1,6 @@
-import 'package:pixiv_404/src/api/model/illust/illust.dart';
-import 'package:pixiv_404/src/api/model/novel/novel.dart';
-import 'package:pixiv_404/src/data/mute/mute_store.dart';
+import 'package:pixora/src/api/model/illust/illust.dart';
+import 'package:pixora/src/api/model/novel/novel.dart';
+import 'package:pixora/src/data/mute/mute_store.dart';
 import 'package:test/test.dart';
 
 Illust illust({

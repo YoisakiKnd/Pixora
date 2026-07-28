@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:pixiv_404/src/data/db/app_database.dart';
-import 'package:pixiv_404/src/data/settings/settings_controller.dart';
+import 'package:pixora/src/data/db/app_database.dart';
+import 'package:pixora/src/data/settings/settings_controller.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -1,4 +1,4 @@
-import 'package:pixiv_404/src/api/pixiv_api.dart';
+import 'package:pixora/src/api/pixiv_api.dart';
 import 'package:test/test.dart';
 
 import 'support/test_api.dart';

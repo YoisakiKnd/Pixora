@@ -3,10 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:pixiv_404/src/api/client/pximg_client.dart';
-import 'package:pixiv_404/src/api/model/illust/illust.dart';
-import 'package:pixiv_404/src/data/download/download_manager.dart';
-import 'package:pixiv_404/src/data/download/download_task.dart';
+import 'package:pixora/src/api/client/pximg_client.dart';
+import 'package:pixora/src/api/model/illust/illust.dart';
+import 'package:pixora/src/data/download/download_manager.dart';
+import 'package:pixora/src/data/download/download_task.dart';
 import 'package:test/test.dart';
 
 /// 可控的假取流器：URL 装上 gate 后会阻塞到手动放行，用来测并发与取消。

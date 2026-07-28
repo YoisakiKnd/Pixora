@@ -1,5 +1,5 @@
-import 'package:pixiv_404/src/api/model/common/page_response.dart';
-import 'package:pixiv_404/src/api/paging/paginator.dart';
+import 'package:pixora/src/api/model/common/page_response.dart';
+import 'package:pixora/src/api/paging/paginator.dart';
 import 'package:test/test.dart';
 
 PageResponse<int> _page(List<int> items, {String? next}) =>

@@ -16,10 +16,10 @@
 
 import 'dart:io';
 
-import 'package:pixiv_404/src/api/auth/client_time.dart';
-import 'package:pixiv_404/src/api/client/dio_factory.dart';
-import 'package:pixiv_404/src/api/pixiv_api.dart';
-import 'package:pixiv_404/src/dev/dotenv.dart';
+import 'package:pixora/src/api/auth/client_time.dart';
+import 'package:pixora/src/api/client/dio_factory.dart';
+import 'package:pixora/src/api/pixiv_api.dart';
+import 'package:pixora/src/dev/dotenv.dart';
 
 Future<void> main(List<String> args) async {
   final options = _parseArgs(args);

@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:pixiv_404/src/api/pixiv_api.dart';
-import 'package:pixiv_404/src/data/pool/object_pool.dart';
+import 'package:pixora/src/api/pixiv_api.dart';
+import 'package:pixora/src/data/pool/object_pool.dart';
 import 'package:test/test.dart';
 
 import 'support/test_api.dart';

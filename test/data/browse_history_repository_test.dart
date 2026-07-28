@@ -1,6 +1,6 @@
 import 'package:drift/native.dart';
-import 'package:pixiv_404/src/data/db/app_database.dart';
-import 'package:pixiv_404/src/data/history/browse_history_repository.dart';
+import 'package:pixora/src/data/db/app_database.dart';
+import 'package:pixora/src/data/history/browse_history_repository.dart';
 import 'package:test/test.dart';
 
 void main() {

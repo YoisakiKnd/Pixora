@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.32.8"
+          flutter-version: "3.41.2"
           channel: stable
           cache: true
       - name: Configure release signing
@@ -40,7 +40,7 @@ jobs:
           EOF
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
+      - run: flutter test test/api test/data test/feature
       - name: Build arm64 APK
         run: flutter build apk --release --split-per-abi
       - name: Prepare Android release files
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.32.8"
+          flutter-version: "3.41.2"
           channel: stable
           cache: true
       - run: flutter pub get

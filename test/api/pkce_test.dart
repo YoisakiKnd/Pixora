@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:pixiv_404/src/api/auth/pkce.dart';
+import 'package:pixora/src/api/auth/pkce.dart';
 import 'package:test/test.dart';
 
 void main() {
