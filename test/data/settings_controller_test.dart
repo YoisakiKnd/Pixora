@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:pixora/src/api/config/api_params.dart';
 import 'package:pixora/src/data/db/app_database.dart';
 import 'package:pixora/src/data/settings/settings_controller.dart';
 import 'package:test/test.dart';
@@ -88,5 +89,50 @@ void main() {
       final preferences = await repository.load();
       expect(preferences.bookmarkButtonCorner, corner);
     }
+  });
+
+  test('新安装首次进入排行榜需要选择偏好', () async {
+    final preferences = await repository.load();
+    expect(preferences.rankingPreferencesConfigured, isFalse);
+    expect(preferences.rankingModes, AppPreferences.defaultRankingModes);
+  });
+
+  test('排行榜偏好忽略未知值并按固定顺序读取', () async {
+    await repository.write(
+      DriftPreferencesRepository.rankingModesKey,
+      'day_r18,unknown,week',
+    );
+    await repository.write(
+      DriftPreferencesRepository.rankingPreferencesConfiguredKey,
+      'true',
+    );
+
+    final preferences = await repository.load();
+    expect(preferences.rankingPreferencesConfigured, isTrue);
+    expect(preferences.rankingModes, [RankingMode.week, RankingMode.dayR18]);
+  });
+
+  test('排行榜偏好可通过控制器持久化', () async {
+    final controller = SettingsController(repository, (_) {});
+    await controller.load();
+    await controller.setRankingModes([RankingMode.dayManga, RankingMode.month]);
+
+    expect(controller.rankingPreferencesConfigured, isTrue);
+    expect(controller.rankingModes, [RankingMode.month, RankingMode.dayManga]);
+
+    final restored = await repository.load();
+    expect(restored.rankingPreferencesConfigured, isTrue);
+    expect(restored.rankingModes, [RankingMode.month, RankingMode.dayManga]);
+  });
+
+  test('空的排行榜偏好不会覆盖已有设置', () async {
+    final controller = SettingsController(repository, (_) {});
+    await controller.load();
+
+    await expectLater(
+      controller.setRankingModes(const []),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(controller.rankingModes, AppPreferences.defaultRankingModes);
   });
 }

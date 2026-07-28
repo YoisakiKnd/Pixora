@@ -27,7 +27,7 @@ class MuteSettingsPage extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
               tooltip: '全部清空',
-              onPressed: () => _confirmClear(context, mute),
+              onPressed: () => _confirmClear(context, ref, mute),
             ),
         ],
       ),
@@ -146,9 +146,16 @@ class MuteSettingsPage extends ConsumerWidget {
     } else {
       await mute.muteTagRegex(value);
     }
+    ref
+        .read(operationFeedbackProvider)
+        .success(key: 'mute-rule', title: '屏蔽规则已添加');
   }
 
-  Future<void> _confirmClear(BuildContext context, MuteStore mute) async {
+  Future<void> _confirmClear(
+    BuildContext context,
+    WidgetRef ref,
+    MuteStore mute,
+  ) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -166,7 +173,14 @@ class MuteSettingsPage extends ConsumerWidget {
         ],
       ),
     );
-    if (ok == true) await mute.clear();
+    if (ok == true) {
+      await mute.clear();
+      if (context.mounted) {
+        ref
+            .read(operationFeedbackProvider)
+            .success(key: 'mute-clear', title: '屏蔽名单已清空');
+      }
+    }
   }
 
   IconData _iconFor(MuteKind kind) => switch (kind) {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/auth/auth_state.dart';
+import '../../widget/operation_feedback.dart';
 import '../../widget/user_hint.dart';
 
 class AccountInfoPage extends ConsumerStatefulWidget {
@@ -19,21 +20,32 @@ class _AccountInfoPageState extends ConsumerState<AccountInfoPage> {
   Future<void> _exportToken() async {
     final account = ref.read(authStateProvider).valueOrNull?.accountOrNull;
     if (account == null) return;
-    final token = await ref
-        .read(accountRepositoryProvider)
-        .readRefreshToken(account.userId);
-    if (!mounted) return;
-    if (token == null || token.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('安全存储中没有可导出的 Token')));
-      return;
+    final feedback = ref.read(operationFeedbackProvider);
+    try {
+      final token = await ref
+          .read(accountRepositoryProvider)
+          .readRefreshToken(account.userId);
+      if (token == null || token.isEmpty) {
+        feedback.error(
+          key: 'copy-token',
+          title: '没有可复制的 Token',
+          message: '安全存储中没有找到当前账号的 refresh_token。',
+        );
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: token));
+      feedback.success(
+        key: 'copy-token',
+        title: 'refresh_token 已复制',
+        message: 'Token 等价于密码，请注意保密。',
+      );
+    } catch (error) {
+      feedback.error(
+        key: 'copy-token',
+        title: '复制 Token 失败',
+        message: operationErrorMessage(error),
+      );
     }
-    await Clipboard.setData(ClipboardData(text: token));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('refresh_token 已复制到剪贴板，请注意保密')),
-    );
   }
 
   @override

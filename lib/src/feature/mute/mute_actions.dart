@@ -32,6 +32,9 @@ Future<void> showMuteSheet(
             onTap: () async {
               await mute.muteIllust(illust);
               if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+              ref
+                  .read(operationFeedbackProvider)
+                  .success(key: 'mute', title: '作品已屏蔽');
             },
           ),
           ListTile(
@@ -41,6 +44,9 @@ Future<void> showMuteSheet(
             onTap: () async {
               await mute.muteUser(illust.user);
               if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+              ref
+                  .read(operationFeedbackProvider)
+                  .success(key: 'mute', title: '画师已屏蔽');
             },
           ),
           if (illust.tags.isNotEmpty) ...[
@@ -73,6 +79,9 @@ Future<void> showMuteSheet(
                         if (sheetContext.mounted) {
                           Navigator.of(sheetContext).pop();
                         }
+                        ref
+                            .read(operationFeedbackProvider)
+                            .success(key: 'mute', title: 'Tag 已屏蔽');
                       },
                     ),
                 ],

@@ -246,85 +246,20 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // 收藏数过滤：正确性 + 成本
+    // 收藏数遮罩的数据来源
     // -----------------------------------------------------------------------
 
-    test('里程碑标签确实能把结果集收窄', () async {
-      const threshold = 5000;
-      final plain = await timed(
-        'GET /v1/search/illust（无过滤）',
+    test('搜索结果包含本地收藏门槛所需数据', () async {
+      const filter = BookmarkFilter(min: 1000);
+      final page = await timed(
+        'GET /v1/search/illust（本地判断收藏数）',
         () => api.search.illusts('オリジナル'),
       );
-      final filtered = await timed(
-        'GET /v1/search/illust（里程碑标签）',
-        () => api.search.illusts(
-          'オリジナル',
-          bookmarkFilter: const BookmarkFilter(
-            min: threshold,
-            strategy: BookmarkFilterStrategy.milestoneTagOnly,
-          ),
-        ),
-      );
 
-      expect(
-        filtered.items,
-        isNotEmpty,
-        reason:
-            '「${threshold}users入り」标签返回空 —— 该档位可能不存在，'
-            '需要调整 BookmarkFilter.milestones',
-      );
-
-      final plainQualified = plain.items
-          .where((i) => i.totalBookmarks >= threshold)
-          .length;
-      final filteredQualified = filtered.items
-          .where((i) => i.totalBookmarks >= threshold)
-          .length;
-
-      stdout.writeln('无过滤：${plain.items.length} 条中 $plainQualified 条达标');
-      stdout.writeln('标签粗筛：${filtered.items.length} 条中 $filteredQualified 条达标');
-
-      // 服务端粗筛后的达标率应该显著更高，这是这套方案成立的前提。
-      expect(
-        filteredQualified / filtered.items.length,
-        greaterThan(plainQualified / plain.items.length),
-        reason: '里程碑标签没有起到收窄作用',
-      );
-    });
-
-    test('匹配方式对里程碑精度的影响（文档里那个取舍）', () async {
-      // 800 不是里程碑档位：服务端只能粗筛到 500，差额由调用方按真实收藏数处理。
-      // 这里同时量两种匹配方式，验证「精确更准、部分更宽松」这个被写进
-      // SearchConflict.milestoneLessPreciseInPartialMatch 的结论。
-      const threshold = 800;
-      const filter = BookmarkFilter(min: threshold);
-
-      Future<double> missRatio(SearchTarget target, String label) async {
-        final page = await timed(
-          'GET /v1/search/illust（min=800, ${target.wire}）',
-          () => api.search.illusts(
-            'オリジナル',
-            target: target,
-            bookmarkFilter: filter,
-          ),
-        );
-        expect(page.items, isNotEmpty, reason: '$label 返回空');
-        final missed = page.items.where((i) => !filter.matches(i)).length;
-        final ratio = missed / page.items.length;
-        stdout.writeln(
-          '$label：${page.items.length} 条中 $missed 条未达 $threshold '
-          '(${(ratio * 100).toStringAsFixed(0)}%)',
-        );
-        return ratio;
-      }
-
-      final exact = await missRatio(SearchTarget.exactMatchForTags, '精确匹配');
-      final partial = await missRatio(SearchTarget.partialMatchForTags, '部分匹配');
-
-      // 这才是要锁住的不变量：精确匹配下标签更准。
-      expect(exact, lessThanOrEqualTo(partial), reason: '精确匹配反而更不准，与实测结论矛盾');
-      // 精确匹配下粗筛应该相当有效（实测 500 档 29/29 达标，未达 800 的是少数）。
-      expect(exact, lessThan(0.5), reason: '精确匹配下粗筛没起作用');
+      expect(page.items, isNotEmpty);
+      final masked = page.items.where((illust) => !filter.matches(illust));
+      stdout.writeln('${page.items.length} 条结果中 ${masked.length} 条应使用收藏门槛遮罩');
+      expect(page.items.every((illust) => illust.totalBookmarks >= 0), isTrue);
     });
 
     test('只看全年龄 + 精确匹配 = 搜不到东西（已知冲突）', () async {

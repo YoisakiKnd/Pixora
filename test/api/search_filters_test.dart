@@ -97,27 +97,22 @@ void main() {
       final r = SearchService.resolveIllustSearch(
         'オリジナル',
         SearchTarget.exactMatchForTags,
-        const BookmarkFilter(min: 500),
         AgeRestriction.safeOnly,
       );
-      expect(r.word, 'オリジナル 500users入り -R-18');
+      expect(r.word, 'オリジナル -R-18');
       expect(r.target, SearchTarget.exactMatchForTags, reason: '不自作主张改匹配方式');
       expect(r.conflicts, contains(SearchConflict.exclusionBreaksExactMatch));
       expect(r.willReturnNothing, isTrue);
     });
 
-    test('部分匹配 + 只看全年龄 + 收藏数 → 只是精度提示，不是错误', () {
+    test('部分匹配下年龄限制独立生效', () {
       final r = SearchService.resolveIllustSearch(
         'オリジナル',
         SearchTarget.partialMatchForTags,
-        const BookmarkFilter(min: 500),
         AgeRestriction.safeOnly,
       );
-      expect(r.word, 'オリジナル 500users入り -R-18');
-      expect(
-        r.conflicts,
-        contains(SearchConflict.milestoneLessPreciseInPartialMatch),
-      );
+      expect(r.word, 'オリジナル -R-18');
+      expect(r.conflicts, isEmpty);
       expect(r.willReturnNothing, isFalse);
     });
 
@@ -130,7 +125,6 @@ void main() {
         final r = SearchService.resolveIllustSearch(
           'オリジナル',
           target,
-          BookmarkFilter.none,
           AgeRestriction.r18Only,
         );
         expect(r.word, 'オリジナル R-18');

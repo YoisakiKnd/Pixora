@@ -2,11 +2,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/pixiv_exception.dart';
 import '../data/auth/auth_state.dart';
 import '../data/settings/settings_controller.dart';
 import '../feature/auth/login_page.dart';
 import '../feature/auth/policy_agreement_page.dart';
 import '../feature/home/home_page.dart';
+import '../widget/operation_feedback.dart';
 import 'providers.dart';
 
 class PixivApp extends ConsumerWidget {
@@ -59,6 +61,11 @@ class PixivApp extends ConsumerWidget {
         _theme(darkScheme),
       ),
     };
+    final feedback = ref.read(operationFeedbackProvider);
+    ref.listen(authAttemptProvider, (previous, next) {
+      final attempt = next.valueOrNull;
+      if (attempt != null) _showAuthAttempt(feedback, attempt);
+    });
     return MaterialApp(
       title: 'Pixora',
       debugShowCheckedModeBanner: false,
@@ -66,8 +73,53 @@ class PixivApp extends ConsumerWidget {
       darkTheme: darkTheme,
       themeMode: themeMode,
       scrollBehavior: const _DesktopScrollBehavior(),
+      builder: (context, child) => OperationFeedbackHost(
+        controller: feedback,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: AuthGate(protocolRegistered: protocolRegistered),
     );
+  }
+
+  void _showAuthAttempt(
+    OperationFeedbackController feedback,
+    AuthAttemptState attempt,
+  ) {
+    switch (attempt) {
+      case AuthAttemptIdle():
+        feedback.dismiss(key: 'auth');
+      case AuthAttemptInProgress(:final stage):
+        switch (stage) {
+          case AuthAttemptStage.openingBrowser:
+            feedback.pending(key: 'auth', title: '正在打开 Pixiv 登录页');
+          case AuthAttemptStage.waitingForBrowser:
+            feedback.info(
+              key: 'auth',
+              title: '等待浏览器完成登录',
+              message: '完成后会自动返回 Pixora 并继续验证。',
+              duration: const Duration(seconds: 8),
+            );
+          case AuthAttemptStage.verifying:
+            feedback.pending(
+              key: 'auth',
+              title: '正在验证登录信息',
+              message: '正在交换 Token 并读取账号信息…',
+            );
+        }
+      case AuthAttemptSucceeded(:final account):
+        feedback.success(
+          key: 'auth',
+          title: '登录成功',
+          message: '欢迎回来，${account.name}',
+        );
+      case AuthAttemptFailed(:final error):
+        if (error is PixivAuthException &&
+            error.reason == AuthFailureReason.malformedInput) {
+          feedback.dismiss(key: 'auth');
+          return;
+        }
+        feedback.error(key: 'auth', title: '登录失败', message: error.userMessage);
+    }
   }
 
   ThemeData _theme(ColorScheme scheme) => ThemeData(

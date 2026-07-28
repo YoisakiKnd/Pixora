@@ -22,7 +22,7 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   /// 传 [executor] 用于测试（`NativeDatabase.memory()`）。
   AppDatabase([QueryExecutor? executor])
-    : super(executor ?? driftDatabase(name: 'pixiv404'));
+    : super(executor ?? driftDatabase(name: 'pixora'));
 
   @override
   int get schemaVersion => 5;

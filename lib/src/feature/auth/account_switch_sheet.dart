@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/db/app_database.dart';
+import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
+import '../../widget/user_hint.dart';
 import 'login_page.dart';
 
 /// 账号切换与管理。
@@ -17,23 +19,33 @@ Future<void> showAccountSwitchSheet(BuildContext context) =>
       builder: (_) => const AccountSwitchSheet(),
     );
 
-class AccountSwitchSheet extends ConsumerWidget {
+class AccountSwitchSheet extends ConsumerStatefulWidget {
   const AccountSwitchSheet({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountSwitchSheet> createState() => _AccountSwitchSheetState();
+}
+
+class _AccountSwitchSheetState extends ConsumerState<AccountSwitchSheet> {
+  int? _busyUserId;
+
+  @override
+  Widget build(BuildContext context) {
     final accounts = ref.watch(accountsProvider);
     final currentId = ref.watch(currentUserIdProvider);
 
     return SafeArea(
       child: accounts.when(
-        loading: () => const Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-        error: (e, _) => Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('读取账号失败：$e'),
+        loading: () => const ContentLoadingView(title: '正在读取账号列表'),
+        error: (error, _) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: UserHint(
+            compact: true,
+            icon: Icons.error_outline,
+            title: '读取账号失败',
+            body: operationErrorMessage(error),
+            tone: UserHintTone.warning,
+          ),
         ),
         data: (list) => ListView(
           shrinkWrap: true,
@@ -49,16 +61,12 @@ class AccountSwitchSheet extends ConsumerWidget {
               _AccountTile(
                 account: account,
                 isCurrent: account.userId == currentId,
-                onTap: () async {
-                  if (account.userId == currentId) {
-                    Navigator.of(context).pop();
-                    return;
-                  }
-                  // 切号会清空对象池，避免上一个账号的收藏状态串过来。
-                  await ref.read(authServiceProvider).switchTo(account.userId);
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-                onRemove: () => _confirmRemove(context, ref, account),
+                onTap: _busyUserId != null
+                    ? null
+                    : () => _switchAccount(account, currentId),
+                onRemove: _busyUserId != null
+                    ? null
+                    : () => _confirmRemove(account),
               ),
             const Divider(height: 8),
             ListTile(
@@ -77,11 +85,40 @@ class AccountSwitchSheet extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmRemove(
-    BuildContext context,
-    WidgetRef ref,
-    Account account,
-  ) async {
+  Future<void> _switchAccount(Account account, int? currentId) async {
+    if (account.userId == currentId) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    setState(() => _busyUserId = account.userId);
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(
+      key: 'account-switch',
+      title: '正在切换账号',
+      message: account.name,
+    );
+    try {
+      // 切号会清空对象池，避免上一个账号的收藏状态串过来。
+      await ref.read(authServiceProvider).switchTo(account.userId);
+      feedback.success(
+        key: 'account-switch',
+        title: '账号已切换',
+        message: account.name,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      feedback.error(
+        key: 'account-switch',
+        title: '切换账号失败',
+        message: operationErrorMessage(error),
+      );
+    } finally {
+      if (mounted) setState(() => _busyUserId = null);
+    }
+  }
+
+  Future<void> _confirmRemove(Account account) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -100,8 +137,30 @@ class AccountSwitchSheet extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    // 删除顺序（先密钥后行）在 AccountRepository 里保证。
-    await ref.read(authServiceProvider).signOut(userId: account.userId);
+    setState(() => _busyUserId = account.userId);
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(
+      key: 'account-remove',
+      title: '正在移除账号',
+      message: account.name,
+    );
+    try {
+      // 删除顺序（先密钥后行）在 AccountRepository 里保证。
+      await ref.read(authServiceProvider).signOut(userId: account.userId);
+      feedback.success(
+        key: 'account-remove',
+        title: '账号已移除',
+        message: account.name,
+      );
+    } catch (error) {
+      feedback.error(
+        key: 'account-remove',
+        title: '移除账号失败',
+        message: operationErrorMessage(error),
+      );
+    } finally {
+      if (mounted) setState(() => _busyUserId = null);
+    }
   }
 }
 
@@ -115,8 +174,8 @@ class _AccountTile extends StatelessWidget {
 
   final Account account;
   final bool isCurrent;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {

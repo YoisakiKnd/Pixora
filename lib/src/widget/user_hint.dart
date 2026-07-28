@@ -108,6 +108,8 @@ class UserHint extends StatelessWidget {
                   ],
                 ),
               ),
+              if (actionLabel != null && onAction != null)
+                TextButton(onPressed: onAction, child: Text(actionLabel!)),
             ],
           ),
         ),
@@ -127,6 +129,53 @@ class UserHint extends StatelessWidget {
 }
 
 enum UserHintTone { neutral, info, warning }
+
+class ContentLoadingView extends StatelessWidget {
+  const ContentLoadingView({super.key, required this.title, this.body});
+
+  final String title;
+  final String? body;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 30,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (body case final body?) ...[
+              const SizedBox(height: 6),
+              Text(
+                body,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// 网络相关的固定文案，保证登录 / 收藏 / 下载 / 搜索口径一致。
 abstract final class NetworkHints {

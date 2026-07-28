@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
+import '../../widget/operation_feedback.dart';
 import '../../widget/user_hint.dart';
 
 /// `require_policy_agreement == true` 时的阻断页。
@@ -22,9 +23,51 @@ class _PolicyAgreementPageState extends ConsumerState<PolicyAgreementPage> {
   bool _checking = false;
 
   Future<void> _recheck() async {
+    if (_checking) return;
     setState(() => _checking = true);
-    await ref.read(authServiceProvider).recheckPolicyAgreement();
-    if (mounted) setState(() => _checking = false);
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(key: 'policy-check', title: '正在检查条款状态');
+    try {
+      final stillRequired = await ref
+          .read(authServiceProvider)
+          .recheckPolicyAgreement();
+      if (stillRequired == true) {
+        feedback.info(
+          key: 'policy-check',
+          title: '暂未检测到同意记录',
+          message: '请在浏览器完成同意后再试一次。',
+        );
+      } else {
+        feedback.success(key: 'policy-check', title: '条款状态已确认');
+      }
+    } catch (error) {
+      feedback.error(
+        key: 'policy-check',
+        title: '检查失败',
+        message: operationErrorMessage(error),
+      );
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _openPixiv() async {
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(key: 'open-policy', title: '正在打开 pixiv.net');
+    try {
+      final opened = await launchUrl(
+        Uri.parse('https://www.pixiv.net/'),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw StateError('browser unavailable');
+      feedback.success(key: 'open-policy', title: '已打开浏览器');
+    } catch (error) {
+      feedback.error(
+        key: 'open-policy',
+        title: '无法打开浏览器',
+        message: operationErrorMessage(error),
+      );
+    }
   }
 
   @override
@@ -63,23 +106,14 @@ class _PolicyAgreementPageState extends ConsumerState<PolicyAgreementPage> {
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse('https://www.pixiv.net/'),
-                  mode: LaunchMode.externalApplication,
-                ),
+                onPressed: _openPixiv,
                 icon: const Icon(Icons.open_in_browser),
                 label: const Text('打开 pixiv.net'),
               ),
               const SizedBox(height: 8),
               OutlinedButton(
                 onPressed: _checking ? null : _recheck,
-                child: _checking
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('我已同意，重新检查'),
+                child: const Text('我已同意，重新检查'),
               ),
             ],
           ),

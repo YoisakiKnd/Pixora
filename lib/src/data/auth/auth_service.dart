@@ -50,13 +50,17 @@ class AuthService {
   TokenRefresher get _refresher => _api.clients.refresher;
 
   final _states = StreamController<AuthState>.broadcast();
+  final _attempts = StreamController<AuthAttemptState>.broadcast();
   StreamSubscription<Uri>? _callbackSubscription;
   StreamSubscription<RefreshOutcome>? _refreshSubscription;
 
   AuthState _state = const AuthUnknown();
+  AuthAttemptState _attempt = const AuthAttemptIdle();
 
   Stream<AuthState> get states => _states.stream;
+  Stream<AuthAttemptState> get attempts => _attempts.stream;
   AuthState get state => _state;
+  AuthAttemptState get attempt => _attempt;
   int? get currentUserId => _state.accountOrNull?.userId;
 
   // -------------------------------------------------------------------------
@@ -98,17 +102,30 @@ class AuthService {
 
   /// 发起授权，拉起系统浏览器。
   Future<void> beginAuthorization({bool signUp = false}) async {
-    final pkce = Pkce.generate();
+    _emitAttempt(const AuthAttemptInProgress(AuthAttemptStage.openingBrowser));
+    try {
+      final pkce = Pkce.generate();
 
-    // **先落盘再拉起浏览器，顺序不能反** —— 否则进程在这中间被杀就丢了 verifier。
-    await _pending.put(pkce.codeVerifier);
+      // **先落盘再拉起浏览器，顺序不能反** —— 否则进程在这中间被杀就丢了 verifier。
+      await _pending.put(pkce.codeVerifier);
 
-    final url = signUp
-        ? PixivOAuth.signupUrl(pkce.codeChallenge)
-        : PixivOAuth.loginUrl(pkce.codeChallenge);
+      final url = signUp
+          ? PixivOAuth.signupUrl(pkce.codeChallenge)
+          : PixivOAuth.loginUrl(pkce.codeChallenge);
 
-    final captured = await _launcher.launch(url);
-    if (captured != null) _bus.accept(captured);
+      final captured = await _launcher.launch(url);
+      if (captured != null) {
+        _bus.accept(captured);
+      } else {
+        _emitAttempt(
+          const AuthAttemptInProgress(AuthAttemptStage.waitingForBrowser),
+        );
+      }
+    } catch (error) {
+      final exception = toPixivException(error);
+      _emitAttempt(AuthAttemptFailed(exception));
+      throw exception;
+    }
   }
 
   /// 三条路径的共同入口。
@@ -116,19 +133,27 @@ class AuthService {
     final code = callback.queryParameters['code'];
     if (code == null || code.isEmpty) return;
 
-    unawaited(_launcher.close());
+    _emitAttempt(const AuthAttemptInProgress(AuthAttemptStage.verifying));
+    try {
+      unawaited(_launcher.close());
 
-    final verifier = await _pending.take();
-    if (verifier == null) {
-      // 明确区分于「授权码无效」，用户能看懂该怎么办。
-      return _emit(const AuthLoggedOut(hint: AuthHint.verifierExpired));
+      final verifier = await _pending.take();
+      if (verifier == null) {
+        const error = PixivAuthException(AuthFailureReason.verifierExpired);
+        _emit(const AuthLoggedOut(hint: AuthHint.verifierExpired));
+        _emitAttempt(const AuthAttemptFailed(error));
+        return;
+      }
+
+      final token = await _api.clients.oauthApi.exchangeCode(
+        code: code,
+        codeVerifier: verifier,
+      );
+      final account = await _adoptToken(token, AuthSource.oauth);
+      _emitAttempt(AuthAttemptSucceeded(account));
+    } catch (error) {
+      _emitAttempt(AuthAttemptFailed(toPixivException(error)));
     }
-
-    final token = await _api.clients.oauthApi.exchangeCode(
-      code: code,
-      codeVerifier: verifier,
-    );
-    await _adoptToken(token, AuthSource.oauth);
   }
 
   // -------------------------------------------------------------------------
@@ -143,9 +168,18 @@ class AuthService {
   ///
   /// 失败时**什么都不写库**，异常原样抛给调用页面去分类展示。
   Future<Account> signInWithRefreshToken(String rawInput) async {
-    final refreshToken = RefreshTokenInput.extract(rawInput);
-    final token = await _api.clients.oauthApi.refresh(refreshToken);
-    return _adoptToken(token, AuthSource.manualToken);
+    _emitAttempt(const AuthAttemptInProgress(AuthAttemptStage.verifying));
+    try {
+      final refreshToken = RefreshTokenInput.extract(rawInput);
+      final token = await _api.clients.oauthApi.refresh(refreshToken);
+      final account = await _adoptToken(token, AuthSource.manualToken);
+      _emitAttempt(AuthAttemptSucceeded(account));
+      return account;
+    } catch (error) {
+      final exception = toPixivException(error);
+      _emitAttempt(AuthAttemptFailed(exception));
+      throw exception;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -197,9 +231,10 @@ class AuthService {
   }
 
   /// 用户在网页同意条款后调用，重新确认状态。
-  Future<void> recheckPolicyAgreement() async {
+  Future<bool?> recheckPolicyAgreement() async {
     final account = _state.accountOrNull;
-    if (account != null) await _checkPolicyAgreement(account);
+    if (account == null) return null;
+    return _checkPolicyAgreement(account, suppressErrors: false);
   }
 
   // -------------------------------------------------------------------------
@@ -217,7 +252,10 @@ class AuthService {
     return account;
   }
 
-  Future<void> _checkPolicyAgreement(Account account) async {
+  Future<bool?> _checkPolicyAgreement(
+    Account account, {
+    bool suppressErrors = true,
+  }) async {
     try {
       final userState = await _api.user.meState();
       await _repo.setRequirePolicyAgreement(
@@ -228,9 +266,16 @@ class AuthService {
           _state.accountOrNull?.userId == account.userId) {
         final fresh = await _repo.accountById(account.userId);
         if (fresh != null) _emit(AuthPolicyAgreementRequired(fresh));
+      } else if (!userState.requirePolicyAgreement &&
+          _state.accountOrNull?.userId == account.userId) {
+        final fresh = await _repo.accountById(account.userId);
+        if (fresh != null) _emit(AuthAuthenticated(fresh));
       }
+      return userState.requirePolicyAgreement;
     } on PixivException {
-      // 查不到就算了，下次启动再查。绝不因此影响登录状态。
+      if (!suppressErrors) rethrow;
+      // 启动后的旁路检查失败不影响登录状态；用户主动复查时由页面显示错误。
+      return null;
     }
   }
 
@@ -274,10 +319,16 @@ class AuthService {
     if (!_states.isClosed) _states.add(state);
   }
 
+  void _emitAttempt(AuthAttemptState attempt) {
+    _attempt = attempt;
+    if (!_attempts.isClosed) _attempts.add(attempt);
+  }
+
   Future<void> dispose() async {
     await _callbackSubscription?.cancel();
     await _refreshSubscription?.cancel();
     await _bus.dispose();
+    await _attempts.close();
     await _states.close();
   }
 }

@@ -37,19 +37,18 @@ class _ManualTokenPageState extends ConsumerState<ManualTokenPage> {
     try {
       // 一次真实的 refresh 请求同时完成：校验有效性 + 拿 access_token +
       // 拿用户信息。失败则什么都不写库。
-      final account = await ref
+      await ref
           .read(authServiceProvider)
           .signInWithRefreshToken(_controller.text);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已登录：${account.name}')));
       Navigator.of(context).pop();
-    } on PixivException catch (e) {
-      // 按类型给不同文案。**网络异常绝不能说成「token 无效」** ——
-      // 那会让用户去折腾一个其实没问题的 token。
-      if (mounted) setState(() => _error = e.userMessage);
+    } on PixivAuthException catch (error) {
+      if (mounted && error.reason == AuthFailureReason.malformedInput) {
+        setState(() => _error = error.userMessage);
+      }
+    } catch (_) {
+      // 其他失败由全局认证反馈统一展示。
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -90,13 +89,7 @@ class _ManualTokenPageState extends ConsumerState<ManualTokenPage> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('验证并登录'),
+            child: const Text('验证并登录'),
           ),
         ],
       ),

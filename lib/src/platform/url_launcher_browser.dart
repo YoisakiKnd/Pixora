@@ -18,17 +18,7 @@ class SystemBrowserLauncher implements AuthorizationLauncher {
 
   @override
   Future<Uri?> launch(Uri authorizeUrl) async {
-    final preferred = Platform.isAndroid
-        ? launcher.LaunchMode.inAppBrowserView
-        : launcher.LaunchMode.externalApplication;
-
-    var opened = await _tryLaunch(authorizeUrl, preferred);
-    if (!opened && preferred != launcher.LaunchMode.externalApplication) {
-      opened = await _tryLaunch(
-        authorizeUrl,
-        launcher.LaunchMode.externalApplication,
-      );
-    }
+    final opened = await launchSystemBrowser(authorizeUrl);
     if (!opened) {
       throw const PixivNetworkException(
         NetworkFailureKind.unknown,
@@ -50,12 +40,24 @@ class SystemBrowserLauncher implements AuthorizationLauncher {
       }
     }
   }
+}
 
-  Future<bool> _tryLaunch(Uri url, launcher.LaunchMode mode) async {
-    try {
-      return await launcher.launchUrl(url, mode: mode);
-    } catch (_) {
-      return false;
-    }
+Future<bool> launchSystemBrowser(Uri url) async {
+  final preferred = Platform.isAndroid
+      ? launcher.LaunchMode.inAppBrowserView
+      : launcher.LaunchMode.externalApplication;
+
+  var opened = await _tryLaunch(url, preferred);
+  if (!opened && preferred != launcher.LaunchMode.externalApplication) {
+    opened = await _tryLaunch(url, launcher.LaunchMode.externalApplication);
+  }
+  return opened;
+}
+
+Future<bool> _tryLaunch(Uri url, launcher.LaunchMode mode) async {
+  try {
+    return await launcher.launchUrl(url, mode: mode);
+  } catch (_) {
+    return false;
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
+import '../../widget/operation_feedback.dart';
 import '../download/downloads_page.dart';
 import '../mute/mute_actions.dart';
 import 'illust_detail_page.dart';
@@ -44,20 +45,28 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
     final target = !current.isBookmarked;
     setState(() => _bookmarking = true);
     _applyBookmark(target);
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(
+      key: 'bookmark',
+      title: target ? '正在收藏作品' : '正在取消收藏',
+      delay: const Duration(milliseconds: 350),
+    );
     try {
       final bookmark = ref.read(pixivApiProvider).bookmark;
       if (target) {
         await bookmark.addIllust(current.id);
-        _showMessage('已收藏');
+        feedback.success(key: 'bookmark', title: '已收藏');
       } else {
         await bookmark.removeIllust(current.id);
-        _showMessage('已取消收藏');
+        feedback.success(key: 'bookmark', title: '已取消收藏');
       }
       if (mounted) Navigator.of(context).pop();
     } on PixivException catch (error) {
       _applyBookmark(!target);
-      _showMessage(
-        target ? '收藏失败：${error.userMessage}' : '取消收藏失败：${error.userMessage}',
+      feedback.error(
+        key: 'bookmark',
+        title: target ? '收藏失败' : '取消收藏失败',
+        message: error.userMessage,
       );
     } finally {
       if (mounted) setState(() => _bookmarking = false);
@@ -80,6 +89,13 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
   Future<void> _download() async {
     if (_downloading) return;
     setState(() => _downloading = true);
+    final feedback = ref.read(operationFeedbackProvider);
+    final navigator = Navigator.of(context);
+    feedback.pending(
+      key: 'download-prepare',
+      title: '正在准备原图下载',
+      message: '正在读取原图信息并加入下载队列…',
+    );
     try {
       var illust = _current;
       if (illust.originalImageUrls.isEmpty) {
@@ -94,34 +110,41 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
           .enqueueIllust(illust);
       if (!mounted) return;
       Navigator.of(context).pop();
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            added > 0 ? '已加入下载队列（$added 张）。若下载失败，请检查系统代理 / VPN' : '已在下载队列或已完成',
+      if (added > 0) {
+        feedback.success(
+          key: 'download-prepare',
+          title: '已加入下载队列',
+          message: '$added 张原图',
+          actionLabel: '查看',
+          onAction: () => navigator.push(
+            MaterialPageRoute(builder: (_) => const DownloadsPage()),
           ),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const DownloadsPage())),
+        );
+      } else {
+        feedback.info(
+          key: 'download-prepare',
+          title: '已在下载队列或已经完成',
+          actionLabel: '查看',
+          onAction: () => navigator.push(
+            MaterialPageRoute(builder: (_) => const DownloadsPage()),
           ),
-        ),
-      );
+        );
+      }
     } on PixivException catch (error) {
-      _showMessage(error.userMessage);
+      feedback.error(
+        key: 'download-prepare',
+        title: '准备下载失败',
+        message: error.userMessage,
+      );
     } catch (error) {
-      _showMessage('加入下载队列失败：$error');
+      feedback.error(
+        key: 'download-prepare',
+        title: '准备下载失败',
+        message: operationErrorMessage(error),
+      );
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _openDetail() {

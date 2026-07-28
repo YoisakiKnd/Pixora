@@ -10,6 +10,7 @@ import '../auth/login_page.dart';
 import '../illust/illust_grid.dart';
 import '../profile/personal_hub_page.dart';
 import '../search/search_page.dart';
+import '../settings/ranking_preferences_page.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -20,14 +21,26 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   int _index = 0;
-  RankingMode _rankingMode = RankingMode.day;
+  RankingMode? _rankingMode;
 
   @override
   Widget build(BuildContext context) {
     final userId = ref.watch(currentUserIdProvider);
     final authState = ref.watch(authStateProvider).valueOrNull;
     final account = authState?.accountOrNull;
-    final pages = <Widget>[_discoverTab(), _followTab(), _rankingTab()];
+    final settings = ref.watch(settingsControllerProvider);
+    final rankingModes = settings.rankingModes;
+    final rankingMode = rankingModes.contains(_rankingMode)
+        ? _rankingMode!
+        : rankingModes.first;
+    final pages = <Widget>[
+      _discoverTab(),
+      _followTab(),
+      _rankingTab(
+        rankingMode,
+        configured: settings.rankingPreferencesConfigured,
+      ),
+    ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -35,9 +48,10 @@ class _HomePageState extends ConsumerState<HomePage> {
         final content = Column(
           children: [
             if (authState is AuthNeedsReauth) const _ReauthBanner(),
-            if (_index == 2)
+            if (_index == 2 && settings.rankingPreferencesConfigured)
               _RankingChips(
-                selected: _rankingMode,
+                modes: rankingModes,
+                selected: rankingMode,
                 onSelected: (mode) => setState(() => _rankingMode = mode),
               ),
             Expanded(
@@ -158,15 +172,26 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _followTab() => const _ActivityTab();
 
-  Widget _rankingTab() => IllustGridView(
-    key: ValueKey(_rankingMode),
-    emptyHint: '这个榜单暂无数据。可切换其他榜单，或检查网络后重试',
-    createPaginator: (api) => Paginator<Illust>(
-      first: () => api.illust.ranking(mode: _rankingMode),
-      byNextUrl: api.illust.nextIllusts,
-      idOf: (item) => item.id,
-    ),
-  );
+  Widget _rankingTab(RankingMode rankingMode, {required bool configured}) {
+    if (!configured) {
+      return RankingPreferencesEditor(
+        firstRun: true,
+        onSaved: () {
+          final modes = ref.read(settingsControllerProvider).rankingModes;
+          setState(() => _rankingMode = modes.first);
+        },
+      );
+    }
+    return IllustGridView(
+      key: ValueKey(rankingMode),
+      emptyHint: '这个榜单暂无数据。可切换其他榜单，或检查网络后重试',
+      createPaginator: (api) => Paginator<Illust>(
+        first: () => api.illust.ranking(mode: rankingMode),
+        byNextUrl: api.illust.nextIllusts,
+        idOf: (item) => item.id,
+      ),
+    );
+  }
 }
 
 class _ActivityTab extends ConsumerWidget {
@@ -244,8 +269,13 @@ class _BookmarkGrid extends StatelessWidget {
 }
 
 class _RankingChips extends StatelessWidget {
-  const _RankingChips({required this.selected, required this.onSelected});
+  const _RankingChips({
+    required this.modes,
+    required this.selected,
+    required this.onSelected,
+  });
 
+  final List<RankingMode> modes;
   final RankingMode selected;
   final ValueChanged<RankingMode> onSelected;
 
@@ -268,7 +298,7 @@ class _RankingChips extends StatelessWidget {
           isDense: true,
         ),
         items: [
-          for (final mode in RankingMode.values)
+          for (final mode in modes)
             DropdownMenuItem(
               value: mode,
               child: Row(

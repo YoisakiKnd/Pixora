@@ -5,6 +5,7 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../data/settings/settings_controller.dart';
+import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import 'illust_actions_sheet.dart';
@@ -16,12 +17,14 @@ class IllustGridView extends ConsumerStatefulWidget {
     required this.createPaginator,
     this.emptyHint = '这里什么都没有',
     this.dimWhen,
+    this.dimLabel,
     this.appendBookmarkedToEnd = false,
   });
 
   final Paginator<Illust> Function(PixivApi api) createPaginator;
   final String emptyHint;
   final bool Function(Illust illust)? dimWhen;
+  final String Function(Illust illust)? dimLabel;
   final bool appendBookmarkedToEnd;
 
   static const filteredMaskAsset = 'assets/illust_mask.webp';
@@ -52,7 +55,8 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
   }
 
   void _onScroll() {
-    if (_scrollController.hasClients &&
+    if (_error == null &&
+        _scrollController.hasClients &&
         _scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 600) {
       _loadMore();
@@ -60,6 +64,7 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
   }
 
   Future<void> _load() async {
+    final refreshing = _paginator.hasStarted;
     setState(() {
       _initialLoading = _paginator.isEmpty;
       _error = null;
@@ -68,8 +73,22 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
       await _paginator.refresh();
       _appendedBookmarks.clear();
       _absorbIntoPool();
+      if (refreshing) {
+        ref
+            .read(operationFeedbackProvider)
+            .success(key: 'grid-refresh', title: '内容已刷新');
+      }
     } catch (error) {
       _error = error;
+      if (!_paginator.isEmpty) {
+        ref
+            .read(operationFeedbackProvider)
+            .error(
+              key: 'grid-refresh',
+              title: '刷新失败',
+              message: operationErrorMessage(error),
+            );
+      }
     } finally {
       if (mounted) setState(() => _initialLoading = false);
     }
@@ -81,7 +100,8 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
       await _paginator.loadMore();
       _absorbIntoPool();
       if (mounted) setState(() {});
-    } catch (_) {
+    } catch (error) {
+      _error = error;
       if (mounted) setState(() {});
     }
   }
@@ -100,7 +120,7 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
   @override
   Widget build(BuildContext context) {
     if (_initialLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const ContentLoadingView(title: '正在加载作品', body: '正在连接 Pixiv，请稍候…');
     }
     if (_error != null && _paginator.isEmpty) {
       return _ErrorView(error: _error!, onRetry: _load);
@@ -130,41 +150,82 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
 
     return RefreshIndicator(
       onRefresh: _load,
-      child: MasonryGridView.builder(
+      child: CustomScrollView(
         controller: _scrollController,
-        padding: const EdgeInsets.all(3),
-        gridDelegate: const SliverSimpleGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-        ),
-        mainAxisSpacing: 3,
-        crossAxisSpacing: 3,
-        itemCount: items.length + 1,
-        itemBuilder: (context, index) {
-          if (index >= items.length) {
-            return _FooterCell(
-              paginator: _paginator,
-              hiddenByMute: hiddenByMute,
-            );
-          }
-          final illust = items[index];
-          return _IllustCard(
-            illust: illust,
+        slivers: [
+          IllustMasonrySliver(
+            items: items,
             dimWhen: widget.dimWhen,
+            dimLabel: widget.dimLabel,
             onBookmarked: widget.appendBookmarkedToEnd
-                ? () => _appendBookmarked(illust)
+                ? _appendBookmarked
                 : null,
-          );
-        },
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: _FooterCell(
+                paginator: _paginator,
+                error: _error,
+                onRetry: _loadMore,
+                hiddenByMute: hiddenByMute,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+class IllustMasonrySliver extends StatelessWidget {
+  const IllustMasonrySliver({
+    super.key,
+    required this.items,
+    this.dimWhen,
+    this.dimLabel,
+    this.onBookmarked,
+  });
+
+  final List<Illust> items;
+  final bool Function(Illust illust)? dimWhen;
+  final String Function(Illust illust)? dimLabel;
+  final ValueChanged<Illust>? onBookmarked;
+
+  @override
+  Widget build(BuildContext context) => SliverPadding(
+    padding: const EdgeInsets.all(3),
+    sliver: SliverMasonryGrid.count(
+      crossAxisCount: 2,
+      mainAxisSpacing: 3,
+      crossAxisSpacing: 3,
+      childCount: items.length,
+      itemBuilder: (context, index) {
+        final illust = items[index];
+        return _IllustCard(
+          illust: illust,
+          dimWhen: dimWhen,
+          dimLabel: dimLabel,
+          onBookmarked: onBookmarked == null
+              ? null
+              : () => onBookmarked!(illust),
+        );
+      },
+    ),
+  );
+}
+
 class _IllustCard extends ConsumerWidget {
-  const _IllustCard({required this.illust, this.dimWhen, this.onBookmarked});
+  const _IllustCard({
+    required this.illust,
+    this.dimWhen,
+    this.dimLabel,
+    this.onBookmarked,
+  });
 
   final Illust illust;
   final bool Function(Illust)? dimWhen;
+  final String Function(Illust)? dimLabel;
   final VoidCallback? onBookmarked;
 
   @override
@@ -178,6 +239,7 @@ class _IllustCard extends ConsumerWidget {
         return _IllustCardBody(
           current: current,
           dimmed: dimmed,
+          dimLabel: dimmed ? dimLabel?.call(current) : null,
           bookmarkCorner: settings.bookmarkButtonCorner,
           maskR18: settings.maskR18,
           onBookmarked: onBookmarked,
@@ -191,6 +253,7 @@ class _IllustCardBody extends ConsumerStatefulWidget {
   const _IllustCardBody({
     required this.current,
     required this.dimmed,
+    this.dimLabel,
     required this.bookmarkCorner,
     required this.maskR18,
     this.onBookmarked,
@@ -198,6 +261,7 @@ class _IllustCardBody extends ConsumerStatefulWidget {
 
   final Illust current;
   final bool dimmed;
+  final String? dimLabel;
   final BookmarkButtonCorner bookmarkCorner;
   final bool maskR18;
   final VoidCallback? onBookmarked;
@@ -303,6 +367,8 @@ class _IllustCardBodyState extends ConsumerState<_IllustCardBody> {
                   spacing: 4,
                   runSpacing: 4,
                   children: [
+                    if (widget.dimmed)
+                      _LabelBadge(widget.dimLabel ?? '未达收藏门槛', Colors.black87),
                     if (current.isR18) const _LabelBadge('R18', Colors.red),
                     if (current.isR18G)
                       const _LabelBadge('R18G', Color(0xFF8E24AA)),
@@ -374,19 +440,21 @@ class _BookmarkButtonState extends ConsumerState<_BookmarkButton> {
             totalBookmarks: item.totalBookmarks + (target ? 1 : -1),
           ),
         );
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(
+      key: 'bookmark',
+      title: target ? '正在收藏作品' : '正在取消收藏',
+      delay: const Duration(milliseconds: 350),
+    );
     try {
       final service = ref.read(pixivApiProvider).bookmark;
       if (target) {
         await service.addIllust(widget.illust.id);
         widget.onBookmarked?.call();
-        if (mounted) {
-          _showBookmarkNotice('已收藏', Icons.favorite);
-        }
+        feedback.success(key: 'bookmark', title: '已收藏');
       } else {
         await service.removeIllust(widget.illust.id);
-        if (mounted) {
-          _showBookmarkNotice('已取消收藏', Icons.favorite_border);
-        }
+        feedback.success(key: 'bookmark', title: '已取消收藏');
       }
     } on PixivException catch (error) {
       ref
@@ -399,40 +467,14 @@ class _BookmarkButtonState extends ConsumerState<_BookmarkButton> {
               totalBookmarks: item.totalBookmarks + (target ? -1 : 1),
             ),
           );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              target
-                  ? '收藏失败：${error.userMessage}'
-                  : '取消收藏失败：${error.userMessage}',
-            ),
-          ),
-        );
-      }
+      feedback.error(
+        key: 'bookmark',
+        title: target ? '收藏失败' : '取消收藏失败',
+        message: error.userMessage,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  void _showBookmarkNotice(String message, IconData icon) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text(message),
-          ],
-        ),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        width: 180,
-      ),
-    );
   }
 
   @override
@@ -443,31 +485,88 @@ class _BookmarkButtonState extends ConsumerState<_BookmarkButton> {
       visualDensity: VisualDensity.compact,
       iconSize: 19,
       tooltip: widget.illust.isBookmarked ? '取消收藏' : '收藏',
-      onPressed: _toggle,
-      icon: Icon(
-        widget.illust.isBookmarked ? Icons.favorite : Icons.favorite_border,
-        color: widget.illust.isBookmarked
-            ? const Color(0xFFFF4D6D)
-            : Colors.white,
-      ),
+      onPressed: _busy ? null : _toggle,
+      icon: _busy
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(
+              widget.illust.isBookmarked
+                  ? Icons.favorite
+                  : Icons.favorite_border,
+              color: widget.illust.isBookmarked
+                  ? const Color(0xFFFF4D6D)
+                  : Colors.white,
+            ),
     ),
   );
 }
 
 class _FooterCell extends StatelessWidget {
-  const _FooterCell({required this.paginator, this.hiddenByMute = 0});
+  const _FooterCell({
+    required this.paginator,
+    required this.error,
+    required this.onRetry,
+    this.hiddenByMute = 0,
+  });
   final Paginator<Illust> paginator;
+  final Object? error;
+  final VoidCallback onRetry;
   final int hiddenByMute;
+
   @override
   Widget build(BuildContext context) {
-    final outline = Theme.of(context).colorScheme.outline;
-    if (paginator.hasMore) {
-      return const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
+    final theme = Theme.of(context);
+    final outline = theme.colorScheme.outline;
+    if (error != null) {
+      return Material(
+        color: theme.colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.cloud_off_outlined,
+                color: theme.colorScheme.onErrorContainer,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '更多内容加载失败',
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                ),
+              ),
+              TextButton(onPressed: onRetry, child: const Text('重试')),
+            ],
+          ),
         ),
+      );
+    }
+    if (paginator.isLoading) {
+      return const Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 8),
+            Text('正在加载更多…'),
+          ],
+        ),
+      );
+    }
+    if (paginator.hasMore) {
+      return Text(
+        '继续下滑加载更多',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 12, color: outline),
       );
     }
     return Center(

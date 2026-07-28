@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../api/pixiv_exception.dart';
 import '../../app/providers.dart';
 import '../../widget/user_hint.dart';
 import 'manual_token_page.dart';
@@ -25,23 +24,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() => _launching = true);
     try {
       await ref.read(authServiceProvider).beginAuthorization(signUp: signUp);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '已在浏览器打开登录页。完成后会自动返回；'
-              '若一直停在登录页，请检查应用代理 / 网络后重试。',
-            ),
-            duration: Duration(seconds: 5),
-          ),
-        );
-      }
-    } on PixivException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.userMessage)));
-      }
+    } catch (_) {
+      // 失败由全局认证反馈统一展示。
     } finally {
       if (mounted) setState(() => _launching = false);
     }
@@ -72,16 +56,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 style: theme.textTheme.headlineSmall,
               ),
               const SizedBox(height: 32),
-
-              const UserHint(
-                compact: true,
-                icon: Icons.vpn_lock_outlined,
-                title: '登录前请先检查网络',
-                body:
-                    '${NetworkHints.needProxy}\n${NetworkHints.browserNotEnough}',
-                tone: UserHintTone.info,
-              ),
-              const SizedBox(height: 16),
 
               if (!canOAuth)
                 const UserHint(

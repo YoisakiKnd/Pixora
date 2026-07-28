@@ -6,10 +6,12 @@ import '../../app/providers.dart';
 import '../../data/auth/auth_state.dart';
 import '../../data/db/app_database.dart';
 import '../../data/settings/settings_controller.dart';
+import '../../widget/operation_feedback.dart';
 import '../../widget/user_hint.dart';
 import '../auth/account_switch_sheet.dart';
 import '../download/downloads_page.dart';
 import '../mute/mute_settings_page.dart';
+import 'ranking_preferences_page.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -91,6 +93,19 @@ class SettingsPage extends ConsumerWidget {
           const _SectionTitle('内容与数据'),
           _SettingsCard(
             children: [
+              _NavigationTile(
+                icon: Icons.leaderboard_outlined,
+                title: '排行榜偏好',
+                subtitle: '选择排行页中可以切换的榜单',
+                value: settings.rankingPreferencesConfigured
+                    ? '${settings.rankingModes.length} 项'
+                    : '未设置',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const RankingPreferencesPage(),
+                  ),
+                ),
+              ),
               ListTile(
                 leading: const _SettingIcon(Icons.favorite_outline),
                 title: const Text('卡片收藏按钮位置'),
@@ -152,7 +167,7 @@ class SettingsPage extends ConsumerWidget {
                 leading: _SettingIcon(Icons.info_outline),
                 title: Text('Pixora · 绘光'),
                 subtitle: Text('第三方 Pixiv 客户端 · Android / Windows'),
-                trailing: Text('v1.1.0'),
+                trailing: Text('v1.2.0'),
               ),
               ListTile(
                 leading: _SettingIcon(Icons.security_outlined),
@@ -304,9 +319,20 @@ class SettingsPage extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(authServiceProvider).signOut();
-    if (context.mounted) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(key: 'sign-out', title: '正在退出账号');
+    try {
+      await ref.read(authServiceProvider).signOut();
+      feedback.success(key: 'sign-out', title: '已退出当前账号');
+      if (context.mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } catch (error) {
+      feedback.error(
+        key: 'sign-out',
+        title: '退出账号失败',
+        message: operationErrorMessage(error),
+      );
     }
   }
 }
@@ -393,13 +419,22 @@ class _AccountPreferenceTilesState
       _showAi = value;
       _updatingAi = true;
     });
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(
+      key: 'account-ai-setting',
+      title: '正在更新 AI 作品偏好',
+      delay: const Duration(milliseconds: 350),
+    );
     try {
       await ref.read(pixivApiProvider).user.setAiShowSetting(value);
+      feedback.success(key: 'account-ai-setting', title: 'AI 作品偏好已更新');
     } catch (error) {
-      if (mounted) {
-        setState(() => _showAi = previous);
-        _showError(error);
-      }
+      if (mounted) setState(() => _showAi = previous);
+      feedback.error(
+        key: 'account-ai-setting',
+        title: 'AI 作品偏好更新失败',
+        message: operationErrorMessage(error),
+      );
     } finally {
       if (mounted) setState(() => _updatingAi = false);
     }
@@ -411,23 +446,26 @@ class _AccountPreferenceTilesState
       _restrictedMode = value;
       _updatingRestricted = true;
     });
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(
+      key: 'account-restricted-setting',
+      title: '正在更新受限模式',
+      delay: const Duration(milliseconds: 350),
+    );
     try {
       await ref.read(pixivApiProvider).user.setRestrictedMode(value);
+      feedback.success(key: 'account-restricted-setting', title: '受限模式已更新');
     } catch (error) {
-      if (mounted) {
-        setState(() => _restrictedMode = previous);
-        _showError(error);
-      }
+      if (mounted) setState(() => _restrictedMode = previous);
+      feedback.error(
+        key: 'account-restricted-setting',
+        title: '受限模式更新失败',
+        message: operationErrorMessage(error),
+      );
     } finally {
       if (mounted) setState(() => _updatingRestricted = false);
     }
   }
-
-  void _showError(Object error) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(error is PixivException ? error.userMessage : '$error'),
-    ),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -444,6 +482,17 @@ class _AccountPreferenceTilesState
           icon: const Icon(Icons.refresh),
           tooltip: '重试',
           onPressed: _load,
+        ),
+      );
+    }
+    if (_showAi == null && _restrictedMode == null) {
+      return const ListTile(
+        leading: _SettingIcon(Icons.manage_accounts_outlined),
+        title: Text('正在读取账号偏好'),
+        subtitle: Text('正在连接 Pixiv…'),
+        trailing: SizedBox.square(
+          dimension: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
       );
     }

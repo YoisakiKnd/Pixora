@@ -27,7 +27,12 @@ class DownloadsPage extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
               tooltip: '清除已结束的记录（不删除文件）',
-              onPressed: manager.clearFinished,
+              onPressed: () {
+                manager.clearFinished();
+                ref
+                    .read(operationFeedbackProvider)
+                    .success(key: 'download-clear', title: '已清除结束的下载记录');
+              },
             ),
         ],
       ),

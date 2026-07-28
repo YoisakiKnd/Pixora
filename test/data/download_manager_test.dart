@@ -92,7 +92,7 @@ void main() {
   late InMemoryDownloadRepository repository;
 
   setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('pixiv404_dl_test');
+    tempDir = await Directory.systemTemp.createTemp('pixora_dl_test');
     fetcher = FakeFetcher();
     repository = InMemoryDownloadRepository();
   });

@@ -13,7 +13,7 @@ android {
         keystorePropertiesFile.inputStream().use(keystoreProperties::load)
     }
 
-    namespace = "com.pixiv404.app"
+    namespace = "io.github.yoisakiknd.pixora"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -23,7 +23,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.pixiv404.app"
+        applicationId = "io.github.yoisakiknd.pixora"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

@@ -2,7 +2,7 @@ name: pixora
 description: "A third-party Pixiv client."
 publish_to: 'none'
 
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ^3.12.2
@@ -51,6 +51,7 @@ dependencies:
   # ---- 图片 ----
   cached_network_image: ^3.4.1
   archive: ^4.0.9
+  share_plus: ^12.0.2
 
 dev_dependencies:
   flutter_test:

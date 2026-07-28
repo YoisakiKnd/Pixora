@@ -7,8 +7,10 @@ import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
+import '../illust/illust_detail_page.dart';
 import '../illust/illust_grid.dart';
 import '../user/user_page.dart';
+import 'pixiv_illust_input.dart';
 
 enum _SearchKind { illust, user }
 
@@ -48,7 +50,7 @@ class _UserSearchResultsState extends ConsumerState<_UserSearchResults> {
   }
 
   void _onScroll() {
-    if (_controller.position.extentAfter < 500) _load();
+    if (_error == null && _controller.position.extentAfter < 500) _load();
   }
 
   Future<void> _load({bool reset = false}) async {
@@ -82,7 +84,7 @@ class _UserSearchResultsState extends ConsumerState<_UserSearchResults> {
   @override
   Widget build(BuildContext context) {
     if (_items.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const ContentLoadingView(title: '正在搜索画师', body: '正在读取相关作者资料…');
     }
     if (_items.isEmpty && _error != null) {
       return UserHint(
@@ -109,13 +111,38 @@ class _UserSearchResultsState extends ConsumerState<_UserSearchResults> {
       child: ListView.separated(
         controller: _controller,
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-        itemCount: _items.length + (_loading ? 1 : 0),
+        itemCount: _items.length + (_loading || _error != null ? 1 : 0),
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           if (index == _items.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+            if (_loading) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('正在加载更多作者…'),
+                    ],
+                  ),
+                ),
+              );
+            }
+            final message = _error is PixivException
+                ? (_error! as PixivException).userMessage
+                : '更多作者加载失败';
+            return UserHint(
+              compact: true,
+              icon: Icons.cloud_off_outlined,
+              title: message,
+              actionLabel: '重试',
+              onAction: _load,
+              tone: UserHintTone.warning,
             );
           }
           final preview = _items[index];
@@ -189,8 +216,12 @@ class _SearchLanding extends ConsumerWidget {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
-              onPressed: () =>
-                  ref.read(searchHistoryRepositoryProvider).clear(),
+              onPressed: () async {
+                await ref.read(searchHistoryRepositoryProvider).clear();
+                ref
+                    .read(operationFeedbackProvider)
+                    .success(key: 'search-history-clear', title: '搜索历史已清空');
+              },
               child: const Text('清空'),
             ),
           ),
@@ -227,40 +258,25 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   SearchAiType? _aiType;
   BookmarkFilter _bookmarks = BookmarkFilter.none;
   AgeRestriction _age = AgeRestriction.all;
-  AspectRatioFilter? _aspectRatio;
-  SearchContentType? _contentType;
-  SizeFilter _size = SizeFilter.none;
-  String? _tool;
-  String? _language;
   DateTime? _startDate;
   DateTime? _endDate;
-  late final Future<SearchOptions> _options;
 
   bool get _hasAdvancedFilters =>
+      _bookmarks.isActive ||
       _age != AgeRestriction.all ||
-      _aspectRatio != null ||
-      _contentType != null ||
-      _size.isActive ||
-      _tool != null ||
-      _language != null ||
+      _aiType != null ||
       _startDate != null ||
       _endDate != null;
 
   ResolvedSearch? get _resolved {
     final word = _word;
     if (word == null) return null;
-    return SearchService.preview(
-      word: word,
-      target: _target,
-      bookmarkFilter: _bookmarks,
-      age: _age,
-    );
+    return SearchService.preview(word: word, target: _target, age: _age);
   }
 
   @override
   void initState() {
     super.initState();
-    _options = ref.read(pixivApiProvider).search.options();
     if (widget.initialWord != null && widget.initialWord!.isNotEmpty) {
       _word = widget.initialWord;
     }
@@ -275,6 +291,29 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Future<void> _submit(String value) async {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
+
+    if (_kind == _SearchKind.illust) {
+      final illustId = PixivIllustInput.parseId(trimmed);
+      if (illustId != null) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => IllustDetailPage(illustId: illustId),
+          ),
+        );
+        return;
+      }
+      if (PixivIllustInput.looksLikePixivLink(trimmed)) {
+        ref
+            .read(operationFeedbackProvider)
+            .error(
+              key: 'search-input',
+              title: '无法识别作品链接',
+              message: '请检查链接中是否包含有效的作品 PID。',
+            );
+        return;
+      }
+    }
+
     await ref.read(searchHistoryRepositoryProvider).add(trimmed);
     if (mounted) setState(() => _word = trimmed);
   }
@@ -292,7 +331,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           decoration: InputDecoration(
             hintText: _kind == _SearchKind.user
                 ? '搜索作者昵称或 Pixiv ID'
-                : '搜索作品、标签',
+                : '关键词、PID 或作品链接',
             border: InputBorder.none,
           ),
           onSubmitted: _submit,
@@ -341,15 +380,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ? _UserSearchResults(word: word)
                 : Column(
                     children: [
-                      if (_bookmarks.isActive || _hasAdvancedFilters)
+                      if (_hasAdvancedFilters)
                         _FilterSummary(
                           filter: _bookmarks,
                           age: _age,
-                          aspectRatio: _aspectRatio,
-                          contentType: _contentType,
-                          size: _size,
-                          tool: _tool,
-                          language: _language,
+                          aiType: _aiType,
                           startDate: _startDate,
                           endDate: _endDate,
                         ),
@@ -361,30 +396,24 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           key: ValueKey(
                             '$word|${_target.wire}|${_sort.wire}'
                             '|${_aiType?.wire}|${_bookmarks.min}|${_bookmarks.max}'
-                            '|${_bookmarks.strategy.name}|${_age.name}'
-                            '|${_aspectRatio?.wire}|${_contentType?.wire}'
-                            '|${_size.widthMin}|${_size.widthMax}'
-                            '|${_size.heightMin}|${_size.heightMax}'
-                            '|$_tool|$_language|$_startDate|$_endDate',
+                            '|${_age.name}|$_startDate|$_endDate',
                           ),
                           emptyHint: '没有找到「$word」的相关作品。可调整筛选，或检查网络后重试',
                           // 不满足阈值的条目不丢弃，改用指定图片遮罩。
-                          dimWhen: _bookmarks.needsClientFilter
+                          dimWhen: _bookmarks.needsMask
                               ? (illust) => !_bookmarks.matches(illust)
                               : null,
+                          dimLabel: _bookmarks.min == null
+                              ? null
+                              : (illust) =>
+                                    '${illust.totalBookmarks} / ${_bookmarks.min} 收藏',
                           createPaginator: (api) => Paginator<Illust>(
                             first: () => api.search.illusts(
                               word,
                               target: _target,
                               sort: _sort,
                               aiType: _aiType,
-                              bookmarkFilter: _bookmarks,
                               age: _age,
-                              aspectRatio: _aspectRatio,
-                              contentType: _contentType,
-                              size: _size,
-                              tool: _tool,
-                              language: _language,
                               startDate: _startDate,
                               endDate: _endDate,
                             ),
@@ -452,26 +481,21 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ),
               const Divider(),
               const _FilterSectionTitle('热度与内容'),
-              const Text('收藏数', style: TextStyle(fontWeight: FontWeight.bold)),
-              _ChoiceTile(
-                label: '不限',
-                selected: !_bookmarks.isActive,
-                onTap: () {
-                  setSheetState(() => _bookmarks = BookmarkFilter.none);
+              const Text(
+                '最低收藏数',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              _BookmarkThresholdSlider(
+                value: _bookmarks.min ?? 0,
+                onChanged: (threshold) {
+                  setSheetState(
+                    () => _bookmarks = threshold == 0
+                        ? BookmarkFilter.none
+                        : BookmarkFilter(min: threshold),
+                  );
                   setState(() {});
                 },
               ),
-              for (final threshold in BookmarkFilter.milestones)
-                _ChoiceTile(
-                  label: '$threshold 收藏以上',
-                  selected: _bookmarks.min == threshold,
-                  onTap: () {
-                    setSheetState(
-                      () => _bookmarks = BookmarkFilter(min: threshold),
-                    );
-                    setState(() {});
-                  },
-                ),
               const Divider(),
               const Text('年龄限制', style: TextStyle(fontWeight: FontWeight.bold)),
               for (final age in AgeRestriction.values)
@@ -488,100 +512,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     setState(() {});
                   },
                 ),
-              const Divider(),
-              const Text('作品类型', style: TextStyle(fontWeight: FontWeight.bold)),
-              _ChoiceTile(
-                label: '不限',
-                selected: _contentType == null,
-                onTap: () {
-                  setSheetState(() => _contentType = null);
-                  setState(() {});
-                },
-              ),
-              for (final type in SearchContentType.values)
-                _ChoiceTile(
-                  label: type.label,
-                  selected: _contentType == type,
-                  onTap: () {
-                    setSheetState(() => _contentType = type);
-                    setState(() {});
-                  },
-                ),
-              const Divider(),
-              const _FilterSectionTitle('画面与来源'),
-              const Text('画面方向', style: TextStyle(fontWeight: FontWeight.bold)),
-              _ChoiceTile(
-                label: '不限',
-                selected: _aspectRatio == null,
-                onTap: () {
-                  setSheetState(() => _aspectRatio = null);
-                  setState(() {});
-                },
-              ),
-              for (final ratio in AspectRatioFilter.values)
-                _ChoiceTile(
-                  label: ratio.label,
-                  selected: _aspectRatio == ratio,
-                  onTap: () {
-                    setSheetState(() => _aspectRatio = ratio);
-                    setState(() {});
-                  },
-                ),
-              const Divider(),
-              const Text('清晰度', style: TextStyle(fontWeight: FontWeight.bold)),
-              for (final preset in SizeFilter.presets)
-                _ChoiceTile(
-                  label: preset.$1,
-                  selected: _sameSize(_size, preset.$2),
-                  onTap: () {
-                    setSheetState(() => _size = preset.$2);
-                    setState(() {});
-                  },
-                ),
-              const Divider(),
-              FutureBuilder<SearchOptions>(
-                future: _options,
-                builder: (context, snapshot) {
-                  final options = snapshot.data?.illust;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _DropdownFilter(
-                        label: '制图工具',
-                        value: _tool,
-                        values: options?.tools.isNotEmpty == true
-                            ? options!.tools
-                            : DrawingTool.common,
-                        onChanged: (value) {
-                          setSheetState(() => _tool = value);
-                          setState(() {});
-                        },
-                      ),
-                      _DropdownFilter(
-                        label: '作品语言',
-                        value: _language,
-                        values: [
-                          for (final language in options?.languages ?? const [])
-                            language.code,
-                          if (options == null || options.languages.isEmpty)
-                            ...SearchLanguage.common,
-                        ],
-                        display: (code) {
-                          for (final language
-                              in options?.languages ?? const []) {
-                            if (language.code == code) return language.name;
-                          }
-                          return code;
-                        },
-                        onChanged: (value) {
-                          setSheetState(() => _language = value);
-                          setState(() {});
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
               const Divider(),
               const _FilterSectionTitle('时间与 AI'),
               const Text('投稿日期', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -640,26 +570,57 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _aiType = null;
     _bookmarks = BookmarkFilter.none;
     _age = AgeRestriction.all;
-    _aspectRatio = null;
-    _contentType = null;
-    _size = SizeFilter.none;
-    _tool = null;
-    _language = null;
     _startDate = null;
     _endDate = null;
   }
-
-  static bool _sameSize(SizeFilter left, SizeFilter right) =>
-      left.widthMin == right.widthMin &&
-      left.widthMax == right.widthMax &&
-      left.heightMin == right.heightMin &&
-      left.heightMax == right.heightMax;
 }
 
-/// 说明当前收藏数过滤实际做了什么。
-///
-/// 附加里程碑标签会把匹配方式强制切成精确标签匹配，这会改变搜索语义 ——
-/// 不说明的话，用户会觉得「加了收藏数过滤后突然搜不到东西了」。
+class _BookmarkThresholdSlider extends StatelessWidget {
+  const _BookmarkThresholdSlider({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final thresholds = BookmarkFilter.thresholds;
+    final rawIndex = thresholds.indexOf(value);
+    final index = rawIndex < 0 ? 0 : rawIndex;
+    final label = value == 0 ? '不限' : '≥ $value';
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text('不限', style: Theme.of(context).textTheme.bodySmall),
+            Expanded(
+              child: Slider(
+                value: index.toDouble(),
+                min: 0,
+                max: (thresholds.length - 1).toDouble(),
+                divisions: thresholds.length - 1,
+                label: label,
+                onChanged: (position) =>
+                    onChanged(thresholds[position.round()]),
+              ),
+            ),
+            Text('5 万', style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+        Text(
+          value == 0 ? '不限制收藏数' : '低于 $value 收藏的作品使用遮罩，仍可打开详情',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 高级搜索中的分组标题。
 class _FilterSectionTitle extends StatelessWidget {
   const _FilterSectionTitle(this.label);
 
@@ -687,42 +648,24 @@ class _FilterSummary extends StatelessWidget {
   const _FilterSummary({
     required this.filter,
     required this.age,
-    required this.aspectRatio,
-    required this.contentType,
-    required this.size,
-    required this.tool,
-    required this.language,
+    required this.aiType,
     required this.startDate,
     required this.endDate,
   });
 
   final BookmarkFilter filter;
   final AgeRestriction age;
-  final AspectRatioFilter? aspectRatio;
-  final SearchContentType? contentType;
-  final SizeFilter size;
-  final String? tool;
-  final String? language;
+  final SearchAiType? aiType;
   final DateTime? startDate;
   final DateTime? endDate;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tag = filter.serverTag;
-
     final parts = <String>[
-      if (filter.min != null) '≥ ${filter.min} 收藏',
-      if (filter.max != null) '≤ ${filter.max} 收藏',
-      if (tag != null) '服务端用「$tag」粗筛，已切为标签精确匹配',
-      if (filter.needsClientFilter) '未达标作品使用图片遮罩',
+      if (filter.min != null) '≥ ${filter.min} 收藏 · 未达标作品使用遮罩',
       if (age != AgeRestriction.all) age.label,
-      ?aspectRatio?.label,
-      ?contentType?.label,
-      if (size.isActive)
-        '尺寸 ${size.widthMin ?? '*'}×${size.heightMin ?? '*'} 以上',
-      ?tool,
-      if (language != null) '语言 $language',
+      if (aiType == SearchAiType.hide) '隐藏 AI 生成作品',
       if (startDate != null) '从 ${_date(startDate!)}',
       if (endDate != null) '到 ${_date(endDate!)}',
     ];
@@ -756,42 +699,6 @@ class _ConflictBanner extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Text('“全年龄”排除语法与“精确标签匹配”冲突，请改用部分匹配。'),
     ),
-  );
-}
-
-class _DropdownFilter extends StatelessWidget {
-  const _DropdownFilter({
-    required this.label,
-    required this.value,
-    required this.values,
-    required this.onChanged,
-    this.display,
-  });
-
-  final String label;
-  final String? value;
-  final List<String> values;
-  final ValueChanged<String?> onChanged;
-  final String Function(String value)? display;
-
-  @override
-  Widget build(BuildContext context) => DropdownButtonFormField<String?>(
-    initialValue: value,
-    isExpanded: true,
-    decoration: InputDecoration(labelText: label),
-    items: [
-      const DropdownMenuItem(value: null, child: Text('不限')),
-      for (final item in values)
-        DropdownMenuItem(
-          value: item,
-          child: Text(
-            display?.call(item) ?? item,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-    ],
-    onChanged: onChanged,
   );
 }
 
@@ -896,10 +803,7 @@ class _TrendingTagsState extends ConsumerState<_TrendingTags> {
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              );
+              return const ContentLoadingView(title: '正在加载热门标签');
             }
             if (snapshot.hasError) {
               final error = snapshot.error;

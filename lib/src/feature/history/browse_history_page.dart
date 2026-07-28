@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/db/app_database.dart';
+import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../illust/illust_detail_page.dart';
@@ -25,11 +26,11 @@ class BrowseHistoryPage extends ConsumerWidget {
         ],
       ),
       body: history.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ContentLoadingView(title: '正在读取浏览历史'),
         error: (error, _) => UserHint(
           icon: Icons.error_outline,
           title: '读取历史失败',
-          body: '$error',
+          body: operationErrorMessage(error),
           tone: UserHintTone.warning,
         ),
         data: (items) => items.isEmpty
@@ -69,6 +70,11 @@ class BrowseHistoryPage extends ConsumerWidget {
     );
     if (confirmed == true) {
       await ref.read(browseHistoryRepositoryProvider).clear();
+      if (context.mounted) {
+        ref
+            .read(operationFeedbackProvider)
+            .success(key: 'history-clear', title: '浏览历史已清空');
+      }
     }
   }
 }
@@ -105,9 +111,13 @@ class _HistoryTile extends ConsumerWidget {
             ref.read(browseHistoryRepositoryProvider).remove(item.id),
       ),
       onTap: isNovel
-          ? () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('小说阅读页尚未接入，当前只能记录浏览历史')),
-            )
+          ? () => ref
+                .read(operationFeedbackProvider)
+                .info(
+                  key: 'novel-unavailable',
+                  title: '小说阅读页尚未接入',
+                  message: '当前只能保留小说浏览记录。',
+                )
           : () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => IllustDetailPage(illustId: item.contentId),

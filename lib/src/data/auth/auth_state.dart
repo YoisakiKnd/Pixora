@@ -1,6 +1,34 @@
 import '../../api/pixiv_exception.dart';
 import '../db/app_database.dart';
 
+enum AuthAttemptStage { openingBrowser, waitingForBrowser, verifying }
+
+sealed class AuthAttemptState {
+  const AuthAttemptState();
+}
+
+final class AuthAttemptIdle extends AuthAttemptState {
+  const AuthAttemptIdle();
+}
+
+final class AuthAttemptInProgress extends AuthAttemptState {
+  const AuthAttemptInProgress(this.stage);
+
+  final AuthAttemptStage stage;
+}
+
+final class AuthAttemptSucceeded extends AuthAttemptState {
+  const AuthAttemptSucceeded(this.account);
+
+  final Account account;
+}
+
+final class AuthAttemptFailed extends AuthAttemptState {
+  const AuthAttemptFailed(this.error);
+
+  final PixivException error;
+}
+
 /// 为什么会退到未登录状态，用于给用户更准确的提示。
 enum AuthHint {
   none,

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
+import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
+import '../../widget/user_hint.dart';
 import '../illust/illust_grid.dart';
 import '../settings/settings_page.dart';
 
@@ -36,6 +38,7 @@ class _UserPageState extends ConsumerState<UserPage> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _error = null);
     try {
       final detail = await ref
           .read(pixivApiProvider)
@@ -62,6 +65,12 @@ class _UserPageState extends ConsumerState<UserPage> {
         workspace: detail.workspace,
       ),
     );
+    final feedback = ref.read(operationFeedbackProvider);
+    feedback.pending(
+      key: 'follow',
+      title: target ? '正在关注画师' : '正在取消关注',
+      delay: const Duration(milliseconds: 350),
+    );
 
     try {
       final users = ref.read(pixivApiProvider).user;
@@ -74,17 +83,14 @@ class _UserPageState extends ConsumerState<UserPage> {
           .read(objectPoolProvider)
           .users
           .update(widget.userId, (u) => u.copyWith(isFollowed: target));
+      feedback.success(key: 'follow', title: target ? '已关注画师' : '已取消关注');
     } on PixivException catch (e) {
-      setState(() => _detail = detail);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              target ? '关注失败：${e.userMessage}' : '取消关注失败：${e.userMessage}',
-            ),
-          ),
-        );
-      }
+      if (mounted) setState(() => _detail = detail);
+      feedback.error(
+        key: 'follow',
+        title: target ? '关注失败' : '取消关注失败',
+        message: e.userMessage,
+      );
     } finally {
       if (mounted) setState(() => _following = false);
     }
@@ -99,18 +105,17 @@ class _UserPageState extends ConsumerState<UserPage> {
       return Scaffold(
         appBar: widget.showAppBar ? AppBar() : null,
         body: _error == null
-            ? const Center(child: CircularProgressIndicator())
-            : Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    _error is PixivException
-                        ? '${(_error as PixivException).userMessage}\n若持续失败，请检查系统代理 / VPN'
-                        : '$_error',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(height: 1.45),
-                  ),
-                ),
+            ? const ContentLoadingView(
+                title: '正在加载画师主页',
+                body: '正在读取画师资料和作品列表…',
+              )
+            : UserHint(
+                icon: Icons.cloud_off_outlined,
+                title: '画师主页加载失败',
+                body: operationErrorMessage(_error!),
+                actionLabel: '重试',
+                onAction: _load,
+                tone: UserHintTone.warning,
               ),
       );
     }
@@ -188,7 +193,12 @@ class _UserPageState extends ConsumerState<UserPage> {
               if (!isSelf)
                 FilledButton.tonal(
                   onPressed: _following ? null : _toggleFollow,
-                  child: Text(detail.user.isFollowed ? '已关注' : '关注'),
+                  child: _following
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(detail.user.isFollowed ? '已关注' : '关注'),
                 ),
             ],
           ),

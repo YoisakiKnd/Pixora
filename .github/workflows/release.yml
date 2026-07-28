@@ -10,8 +10,41 @@ permissions:
   contents: write
 
 jobs:
-  android:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test test/api test/data test/feature
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: android-arm64
+            source: app-arm64-v8a-release.apk
+            asset: pixora-android-arm64-v8a-release.apk
+            artifact: pixora-android-arm64-v8a
+          - abi: armeabi-v7a
+            target: android-arm
+            source: app-armeabi-v7a-release.apk
+            asset: pixora-android-armeabi-v7a-release.apk
+            artifact: pixora-android-armeabi-v7a
+          - abi: x86_64
+            target: android-x64
+            source: app-x86_64-release.apk
+            asset: pixora-android-x86_64-release.apk
+            artifact: pixora-android-x86_64
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -39,22 +72,21 @@ jobs:
           storeFile=../release.jks
           EOF
       - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test test/api test/data test/feature
-      - name: Build arm64 APK
-        run: flutter build apk --release --split-per-abi
-      - name: Prepare Android release files
+      - name: Build Android ${{ matrix.abi }} APK
+        run: flutter build apk --release --split-per-abi --target-platform "${{ matrix.target }}"
+      - name: Prepare Android ${{ matrix.abi }} release files
         run: |
           mkdir -p release
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk release/pixora-android-arm64-release.apk
+          cp "build/app/outputs/flutter-apk/${{ matrix.source }}" "release/${{ matrix.asset }}"
           cd release
-          sha256sum pixora-android-arm64-release.apk > pixora-android-arm64-release.apk.sha256
+          sha256sum "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
       - uses: actions/upload-artifact@v4
         with:
-          name: pixora-android-arm64
+          name: ${{ matrix.artifact }}
           path: release/*
 
   windows:
+    needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,9 +96,9 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Build Windows Release
+      - name: Build Windows x64 Release
         run: flutter build windows --release
-      - name: Prepare Windows release files
+      - name: Prepare Windows x64 release files
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null

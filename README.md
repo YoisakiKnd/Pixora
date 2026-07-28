@@ -6,7 +6,7 @@ Pixora 是面向 Android 和 Windows 的第三方 Pixiv 客户端，提供响应
 
 ## 平台
 
-- Android：本地测试和 GitHub Release 提供 `arm64-v8a` APK。
+- Android：本地测试和 GitHub Release 分别提供 `arm64-v8a`、`armeabi-v7a` 和 `x86_64` APK。
 - Windows：发布完整运行目录的 ZIP，不能只复制 `pixora.exe`。
 - 网络：应用不内置代理，需要系统代理或 VPN 对应用进程生效。
 
@@ -20,27 +20,29 @@ flutter test
 
 项目当前在 Windows Bash 环境中可使用 `/d/flutter/bin/flutter.bat` 替代 `flutter`。
 
-## 构建 Android arm64 APK
+## 构建 Android 多架构 APK
 
 PowerShell：
 
 ```powershell
-./tool/build_android_arm64.ps1
+./tool/build_android_release.ps1
 ```
 
 Bash / CI：
 
 ```bash
-FLUTTER_BIN=flutter ./tool/build_android_arm64.sh
+FLUTTER_BIN=flutter ./tool/build_android_release.sh
 ```
 
-脚本通过 `--split-per-abi` 构建并只复制 arm64 产物到：
+脚本通过 `--split-per-abi` 构建并复制三种架构产物及其 SHA-256：
 
 ```text
-dist/pixora-android-arm64-release.apk
+dist/pixora-android-arm64-v8a-release.apk
+dist/pixora-android-armeabi-v7a-release.apk
+dist/pixora-android-x86_64-release.apk
 ```
 
-本地未配置正式签名时使用 debug key，仅适合测试安装。
+Flutter 不提供 32 位 Android x86 Release，桌面或模拟器版本使用 `x86_64`。本地未配置正式签名时使用 debug key，仅适合测试安装。
 
 ## 构建 Windows
 
@@ -58,9 +60,11 @@ build/windows/x64/runner/Release/
 
 `.github/workflows/release.yml` 支持手动运行和推送 `v*` 标签。标签发布会生成：
 
-- `pixora-android-arm64-release.apk`
+- `pixora-android-arm64-v8a-release.apk`
+- `pixora-android-armeabi-v7a-release.apk`
+- `pixora-android-x86_64-release.apk`
 - `pixora-windows-x64-release.zip`
-- 两个产物对应的 SHA-256 文件
+- 四个产物对应的 SHA-256 文件
 
 Android 正式签名需要在仓库 Actions Secrets 中配置：
 
@@ -72,8 +76,8 @@ Android 正式签名需要在仓库 Actions Secrets 中配置：
 创建发布示例：
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 工作流不会构建 AAB，也不会把签名文件写入仓库。

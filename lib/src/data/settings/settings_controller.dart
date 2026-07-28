@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 
+import '../../api/config/api_params.dart';
 import '../../api/pixiv_constants.dart';
 import '../db/app_database.dart';
 
@@ -36,13 +37,24 @@ class AppPreferences {
     this.contentLanguage = 'zh-CN',
     this.bookmarkButtonCorner = BookmarkButtonCorner.topLeft,
     this.maskR18 = false,
+    this.rankingPreferencesConfigured = false,
+    this.rankingModes = defaultRankingModes,
   });
+
+  static const defaultRankingModes = <RankingMode>[
+    RankingMode.day,
+    RankingMode.week,
+    RankingMode.month,
+    RankingMode.weekOriginal,
+  ];
 
   final AppThemeMode themeMode;
   final String uiLanguage;
   final String contentLanguage;
   final BookmarkButtonCorner bookmarkButtonCorner;
   final bool maskR18;
+  final bool rankingPreferencesConfigured;
+  final List<RankingMode> rankingModes;
 
   PixivLanguage get pixivLanguage =>
       PixivLanguage(uiTag: uiLanguage, contentTag: contentLanguage);
@@ -64,6 +76,9 @@ class DriftPreferencesRepository implements PreferencesRepository {
   static const bookmarkButtonCornerKey = 'settings.bookmark_button_corner';
   static const bookmarkButtonOnRightKey = 'settings.bookmark_button_on_right';
   static const maskR18Key = 'settings.mask_r18';
+  static const rankingPreferencesConfiguredKey =
+      'settings.ranking_preferences_configured';
+  static const rankingModesKey = 'settings.ranking_modes';
 
   @override
   Future<AppPreferences> load() async {
@@ -76,10 +91,13 @@ class DriftPreferencesRepository implements PreferencesRepository {
                 bookmarkButtonCornerKey,
                 bookmarkButtonOnRightKey,
                 maskR18Key,
+                rankingPreferencesConfiguredKey,
+                rankingModesKey,
               ]),
             ))
             .get();
     final values = {for (final row in rows) row.key: row.value};
+    final rankingModes = _parseRankingModes(values[rankingModesKey]);
     return AppPreferences(
       themeMode: AppThemeMode.values.firstWhere(
         (mode) => mode.name == values[themeModeKey],
@@ -94,6 +112,12 @@ class DriftPreferencesRepository implements PreferencesRepository {
       contentLanguage: values[contentLanguageKey] ?? 'zh-CN',
       bookmarkButtonCorner: _parseBookmarkCorner(values),
       maskR18: values[maskR18Key] == 'true',
+      rankingPreferencesConfigured:
+          values[rankingPreferencesConfiguredKey] == 'true' &&
+          rankingModes.isNotEmpty,
+      rankingModes: rankingModes.isEmpty
+          ? AppPreferences.defaultRankingModes
+          : rankingModes,
     );
   }
 
@@ -110,6 +134,15 @@ class DriftPreferencesRepository implements PreferencesRepository {
     return values[bookmarkButtonOnRightKey] == 'true'
         ? BookmarkButtonCorner.topRight
         : BookmarkButtonCorner.topLeft;
+  }
+
+  static List<RankingMode> _parseRankingModes(String? stored) {
+    if (stored == null || stored.isEmpty) return const [];
+    final wires = stored.split(',').toSet();
+    return [
+      for (final mode in RankingMode.values)
+        if (wires.contains(mode.wire)) mode,
+    ];
   }
 
   @override
@@ -131,12 +164,16 @@ class SettingsController extends ChangeNotifier {
   String _contentLanguage = 'zh-CN';
   BookmarkButtonCorner _bookmarkButtonCorner = BookmarkButtonCorner.topLeft;
   bool _maskR18 = false;
+  bool _rankingPreferencesConfigured = false;
+  List<RankingMode> _rankingModes = AppPreferences.defaultRankingModes;
 
   AppThemeMode get themeMode => _themeMode;
   String get uiLanguage => _uiLanguage;
   String get contentLanguage => _contentLanguage;
   BookmarkButtonCorner get bookmarkButtonCorner => _bookmarkButtonCorner;
   bool get maskR18 => _maskR18;
+  bool get rankingPreferencesConfigured => _rankingPreferencesConfigured;
+  List<RankingMode> get rankingModes => List.unmodifiable(_rankingModes);
 
   Future<void> load() async {
     final preferences = await _repository.load();
@@ -145,6 +182,8 @@ class SettingsController extends ChangeNotifier {
     _contentLanguage = preferences.contentLanguage;
     _bookmarkButtonCorner = preferences.bookmarkButtonCorner;
     _maskR18 = preferences.maskR18;
+    _rankingPreferencesConfigured = preferences.rankingPreferencesConfigured;
+    _rankingModes = List.of(preferences.rankingModes);
     _onLanguageChanged(preferences.pixivLanguage);
     notifyListeners();
   }
@@ -193,6 +232,30 @@ class SettingsController extends ChangeNotifier {
     _maskR18 = value;
     notifyListeners();
     await _repository.write(DriftPreferencesRepository.maskR18Key, '$value');
+  }
+
+  Future<void> setRankingModes(Iterable<RankingMode> values) async {
+    final requested = values.toSet();
+    final normalized = [
+      for (final mode in RankingMode.values)
+        if (requested.contains(mode)) mode,
+    ];
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(values, 'values', '至少选择一个排行榜');
+    }
+    _rankingModes = normalized;
+    _rankingPreferencesConfigured = true;
+    notifyListeners();
+    await Future.wait([
+      _repository.write(
+        DriftPreferencesRepository.rankingModesKey,
+        normalized.map((mode) => mode.wire).join(','),
+      ),
+      _repository.write(
+        DriftPreferencesRepository.rankingPreferencesConfiguredKey,
+        'true',
+      ),
+    ]);
   }
 
   void _applyLanguage() => _onLanguageChanged(

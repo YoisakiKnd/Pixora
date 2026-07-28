@@ -1,4 +1,4 @@
-package com.pixiv404.app
+package io.github.yoisakiknd.pixora
 
 import io.flutter.embedding.android.FlutterActivity
 

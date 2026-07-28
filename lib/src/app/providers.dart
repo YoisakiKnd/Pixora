@@ -24,6 +24,7 @@ import '../platform/app_links_callback_source.dart';
 import '../platform/download_location.dart';
 import '../platform/secure_secret_store.dart';
 import '../platform/url_launcher_browser.dart';
+import '../widget/operation_feedback.dart';
 
 /// 唯一把 `lib/src/api/`（纯 Dart）与平台实现拼接起来的地方。
 
@@ -131,11 +132,22 @@ final authServiceProvider = Provider<AuthService>((ref) {
   return service;
 });
 
+final operationFeedbackProvider =
+    ChangeNotifierProvider<OperationFeedbackController>(
+      (ref) => OperationFeedbackController(),
+    );
+
 /// 当前认证状态。先吐一次当前值，再接上后续变化。
 final authStateProvider = StreamProvider<AuthState>((ref) async* {
   final service = ref.watch(authServiceProvider);
   yield service.state;
   yield* service.states;
+});
+
+final authAttemptProvider = StreamProvider<AuthAttemptState>((ref) async* {
+  final service = ref.watch(authServiceProvider);
+  yield service.attempt;
+  yield* service.attempts;
 });
 
 /// 当前登录账号的 pixiv user id。未登录为 null。

@@ -92,6 +92,37 @@ class _ProgressivePixivImageState extends State<ProgressivePixivImage> {
               curve: Curves.easeOut,
               child: Image(image: provider, fit: widget.fit),
             ),
+          if (_originalProvider != null && !_originalReady && !_originalFailed)
+            Positioned(
+              right: 10,
+              bottom: 10,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(width: 7),
+                      Text(
+                        '原图加载中…',
+                        style: TextStyle(color: Colors.white, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (_originalFailed)
             Positioned(
               right: 10,
