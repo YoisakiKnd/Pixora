@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -250,6 +252,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initialWord ?? '',
   );
+  final FocusNode _searchFocusNode = FocusNode();
+  Timer? _autocompleteDebounce;
+  List<Tag> _autocompleteTags = const [];
+  Object? _autocompleteError;
+  bool _autocompleteLoading = false;
+  int _autocompleteGeneration = 0;
 
   String? _word;
   _SearchKind _kind = _SearchKind.illust;
@@ -274,9 +282,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     return SearchService.preview(word: word, target: _target, age: _age);
   }
 
+  bool get _showAutocomplete {
+    final input = _controller.text.trim();
+    return _kind == _SearchKind.illust &&
+        _searchFocusNode.hasFocus &&
+        input.isNotEmpty &&
+        input != _word;
+  }
+
   @override
   void initState() {
     super.initState();
+    _searchFocusNode.addListener(_onSearchFocusChanged);
     if (widget.initialWord != null && widget.initialWord!.isNotEmpty) {
       _word = widget.initialWord;
     }
@@ -284,13 +301,79 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   @override
   void dispose() {
+    _autocompleteDebounce?.cancel();
+    _searchFocusNode.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onSearchFocusChanged() {
+    if (!mounted) return;
+    if (_searchFocusNode.hasFocus) {
+      _scheduleAutocomplete(_controller.text);
+    } else {
+      setState(() {});
+    }
+  }
+
+  void _scheduleAutocomplete(String value) {
+    _autocompleteDebounce?.cancel();
+    final generation = ++_autocompleteGeneration;
+    final word = value.trim();
+    if (_kind != _SearchKind.illust || word.isEmpty || word == _word) {
+      setState(_clearAutocompleteState);
+      return;
+    }
+
+    setState(() {
+      _autocompleteLoading = true;
+      _autocompleteError = null;
+      _autocompleteTags = const [];
+    });
+    _autocompleteDebounce = Timer(const Duration(milliseconds: 280), () async {
+      try {
+        final tags = await ref.read(pixivApiProvider).search.autocomplete(word);
+        if (!mounted || generation != _autocompleteGeneration) return;
+        setState(() {
+          _autocompleteTags = tags;
+          _autocompleteLoading = false;
+        });
+      } catch (error) {
+        if (!mounted || generation != _autocompleteGeneration) return;
+        setState(() {
+          _autocompleteError = error;
+          _autocompleteLoading = false;
+        });
+      }
+    });
+  }
+
+  void _clearAutocompleteState() {
+    _autocompleteTags = const [];
+    _autocompleteError = null;
+    _autocompleteLoading = false;
+  }
+
+  void _stopAutocomplete() {
+    _autocompleteDebounce?.cancel();
+    _autocompleteGeneration++;
+    _clearAutocompleteState();
+    _searchFocusNode.unfocus();
+  }
+
+  void _pickAutocomplete(Tag tag) {
+    final word = tag.searchWord;
+    _controller.value = TextEditingValue(
+      text: word,
+      selection: TextSelection.collapsed(offset: word.length),
+    );
+    unawaited(_submit(word));
   }
 
   Future<void> _submit(String value) async {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
+    _stopAutocomplete();
 
     if (_kind == _SearchKind.illust) {
       final illustId = PixivIllustInput.parseId(trimmed);
@@ -326,6 +409,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       appBar: AppBar(
         title: TextField(
           controller: _controller,
+          focusNode: _searchFocusNode,
           autofocus: word == null,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
@@ -334,6 +418,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 : '关键词、PID 或作品链接',
             border: InputBorder.none,
           ),
+          onChanged: _scheduleAutocomplete,
           onSubmitted: _submit,
         ),
         actions: [
@@ -364,12 +449,30 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               ],
               selected: {_kind},
               onSelectionChanged: (values) {
-                setState(() => _kind = values.single);
+                final nextKind = values.single;
+                setState(() {
+                  _kind = nextKind;
+                  _autocompleteDebounce?.cancel();
+                  _autocompleteGeneration++;
+                  _clearAutocompleteState();
+                });
+                if (nextKind == _SearchKind.illust &&
+                    _searchFocusNode.hasFocus) {
+                  _scheduleAutocomplete(_controller.text);
+                }
               },
             ),
           ),
           Expanded(
-            child: word == null
+            child: _showAutocomplete
+                ? _AutocompleteSuggestions(
+                    query: _controller.text.trim(),
+                    tags: _autocompleteTags,
+                    loading: _autocompleteLoading,
+                    error: _autocompleteError,
+                    onPick: _pickAutocomplete,
+                  )
+                : word == null
                 ? _SearchLanding(
                     onPick: (tag) {
                       _controller.text = tag;
@@ -572,6 +675,73 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _age = AgeRestriction.all;
     _startDate = null;
     _endDate = null;
+  }
+}
+
+class _AutocompleteSuggestions extends StatelessWidget {
+  const _AutocompleteSuggestions({
+    required this.query,
+    required this.tags,
+    required this.loading,
+    required this.error,
+    required this.onPick,
+  });
+
+  final String query;
+  final List<Tag> tags;
+  final bool loading;
+  final Object? error;
+  final ValueChanged<Tag> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+      children: [
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          leading: const Icon(Icons.tag),
+          title: const Text('Tag 自动补全'),
+          subtitle: Text('为「$query」查找原始 Tag 与翻译'),
+        ),
+        if (loading) const LinearProgressIndicator(),
+        if (!loading && error != null)
+          UserHint(
+            compact: true,
+            icon: Icons.cloud_off_outlined,
+            title: '自动补全暂不可用',
+            body: error is PixivException
+                ? (error! as PixivException).userMessage
+                : '请继续输入或直接回车搜索。',
+            tone: UserHintTone.warning,
+          )
+        else if (!loading && tags.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              '没有匹配的 Tag，可直接回车按关键词搜索。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        else
+          for (final tag in tags)
+            Card(
+              margin: const EdgeInsets.only(bottom: 6),
+              child: ListTile(
+                leading: const Icon(Icons.tag_outlined),
+                title: Text(tag.name),
+                subtitle: tag.translation == null
+                    ? null
+                    : Text(tag.translation!),
+                trailing: const Icon(Icons.north_west, size: 18),
+                onTap: () => onPick(tag),
+              ),
+            ),
+      ],
+    );
   }
 }
 
@@ -843,8 +1013,8 @@ class _TrendingTagsState extends ConsumerState<_TrendingTags> {
               children: [
                 for (final tag in tags)
                   ActionChip(
-                    label: Text(tag.display),
-                    onPressed: () => widget.onPick(tag.tag),
+                    label: Text(tag.bilingualDisplay),
+                    onPressed: () => widget.onPick(tag.searchWord),
                   ),
               ],
             );

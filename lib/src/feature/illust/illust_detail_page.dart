@@ -533,20 +533,15 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
                             borderRadius: BorderRadius.circular(18),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(18),
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      SearchPage(initialWord: tag.name),
-                                ),
-                              ),
-                              onLongPress: () => _showTagActions(tag.name),
+                              onTap: () => _openTagSearch(tag),
+                              onLongPress: () => _showTagActions(tag),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 6,
                                 ),
                                 child: Text(
-                                  '#${tag.display}',
+                                  '#${tag.bilingualDisplay}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color:
                                         theme.colorScheme.onSecondaryContainer,
@@ -706,7 +701,16 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
     ];
   }
 
-  Future<void> _showTagActions(String tag) async {
+  void _openTagSearch(Tag tag) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchPage(initialWord: tag.searchWord),
+      ),
+    );
+  }
+
+  Future<void> _showTagActions(Tag tag) async {
+    final searchWord = tag.searchWord;
     await showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -714,21 +718,20 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
           children: [
             ListTile(
               leading: const Icon(Icons.search),
-              title: Text('搜索「$tag」'),
+              title: Text('搜索「$searchWord」'),
+              subtitle: tag.translation == null
+                  ? null
+                  : Text('译名：${tag.translation}'),
               onTap: () {
                 Navigator.pop(sheetContext);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => SearchPage(initialWord: tag),
-                  ),
-                );
+                _openTagSearch(tag);
               },
             ),
             ListTile(
               leading: const Icon(Icons.copy),
               title: const Text('复制 Tag'),
               onTap: () async {
-                await Clipboard.setData(ClipboardData(text: tag));
+                await Clipboard.setData(ClipboardData(text: searchWord));
                 if (sheetContext.mounted) Navigator.pop(sheetContext);
                 ref
                     .read(operationFeedbackProvider)
@@ -739,7 +742,7 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
               leading: const Icon(Icons.block),
               title: const Text('屏蔽 Tag'),
               onTap: () async {
-                await ref.read(muteStoreProvider).muteTag(tag);
+                await ref.read(muteStoreProvider).muteTag(searchWord);
                 if (sheetContext.mounted) Navigator.pop(sheetContext);
                 ref
                     .read(operationFeedbackProvider)

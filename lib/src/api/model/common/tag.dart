@@ -26,7 +26,22 @@ class Tag {
   );
 
   /// 展示用：优先翻译名，回落原名。
-  String get display => translatedName ?? name;
+  String get display => translation ?? name;
+
+  /// 搜索和屏蔽必须使用 Pixiv 返回的原始 Tag，不能使用界面翻译。
+  String get searchWord => name;
+
+  /// 同时展示原文与翻译，避免用户误以为点击后会搜索翻译文本。
+  String get bilingualDisplay {
+    final translated = translation;
+    return translated == null ? name : '$name · $translated';
+  }
+
+  String? get translation {
+    final value = translatedName?.trim();
+    if (value == null || value.isEmpty || value == name) return null;
+    return value;
+  }
 
   @override
   String toString() => name;
@@ -55,7 +70,20 @@ class TrendingTag {
     illust: asMap(json['illust']),
   );
 
-  String get display => translatedName ?? tag;
+  String get display => translation ?? tag;
+
+  String get searchWord => tag;
+
+  String get bilingualDisplay {
+    final translated = translation;
+    return translated == null ? tag : '$tag · $translated';
+  }
+
+  String? get translation {
+    final value = translatedName?.trim();
+    if (value == null || value.isEmpty || value == tag) return null;
+    return value;
+  }
 }
 
 /// 用户自定义的收藏分类标签（`/v1/user/bookmark-tags/illust`）。

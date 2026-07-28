@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/auth/auth_state.dart';
+import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../download/downloads_page.dart';
 import '../user/user_page.dart';
@@ -31,14 +32,14 @@ class PersonalHubPage extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 42,
-                    backgroundImage: account.profileImageUrl?.isNotEmpty == true
-                        ? NetworkImage(account.profileImageUrl!)
-                        : null,
-                    child: account.profileImageUrl?.isNotEmpty != true
-                        ? const Icon(Icons.person, size: 42)
-                        : null,
+                  ClipOval(
+                    child: PixivImage(
+                      url: account.profileImageUrl,
+                      width: 84,
+                      height: 84,
+                      placeholderWidget: const Icon(Icons.person, size: 42),
+                      errorWidget: const Icon(Icons.person, size: 42),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(

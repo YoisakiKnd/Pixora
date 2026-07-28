@@ -18,6 +18,8 @@ class PixivImage extends StatelessWidget {
     this.width,
     this.height,
     this.borderRadius,
+    this.placeholderWidget,
+    this.errorWidget,
   });
 
   final String? url;
@@ -25,6 +27,8 @@ class PixivImage extends StatelessWidget {
   final double? width;
   final double? height;
   final BorderRadius? borderRadius;
+  final Widget? placeholderWidget;
+  final Widget? errorWidget;
 
   static const headers = <String, String>{
     'Referer': PixivHosts.imageReferer,
@@ -39,7 +43,7 @@ class PixivImage extends StatelessWidget {
     if (target == null || target.isEmpty) {
       child = _placeholder(
         context,
-        const Icon(Icons.image_not_supported_outlined),
+        errorWidget ?? const Icon(Icons.image_not_supported_outlined),
       );
     } else {
       child = CachedNetworkImage(
@@ -49,9 +53,11 @@ class PixivImage extends StatelessWidget {
         width: width,
         height: height,
         fadeInDuration: const Duration(milliseconds: 150),
-        placeholder: (_, _) => _placeholder(context, null),
-        errorWidget: (_, _, _) =>
-            _placeholder(context, const Icon(Icons.broken_image_outlined)),
+        placeholder: (_, _) => _placeholder(context, placeholderWidget),
+        errorWidget: (_, _, _) => _placeholder(
+          context,
+          errorWidget ?? const Icon(Icons.broken_image_outlined),
+        ),
       );
     }
 
