@@ -25,7 +25,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'pixora'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -47,6 +47,13 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) await m.createTable(browseHistory);
       // v5：最近搜索的 Tag。
       if (from < 5) await m.createTable(searchHistory);
+      // v6：区分作品与作者关键词，避免同一数字在不同模式下产生歧义。
+      if (from >= 5 && from < 6) {
+        await m.alterTable(
+          // ignore: experimental_member_use
+          TableMigration(searchHistory, newColumns: [searchHistory.kind]),
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');

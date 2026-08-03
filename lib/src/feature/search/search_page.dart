@@ -12,12 +12,12 @@ import '../../widget/user_hint.dart';
 import '../illust/illust_detail_page.dart';
 import '../illust/illust_grid.dart';
 import '../user/user_page.dart';
-import 'pixiv_illust_input.dart';
+import 'pixiv_search_input.dart';
 
-enum _SearchKind { illust, user }
+typedef _SearchKind = SearchKind;
 
 class _UserSearchResults extends ConsumerStatefulWidget {
-  const _UserSearchResults({required this.word});
+  const _UserSearchResults({super.key, required this.word});
 
   final String word;
 
@@ -31,6 +31,8 @@ class _UserSearchResultsState extends ConsumerState<_UserSearchResults> {
   Object? _error;
   bool _loading = false;
   bool _hasMore = true;
+  int _offset = 0;
+  int _generation = 0;
 
   @override
   void initState() {
@@ -56,30 +58,37 @@ class _UserSearchResultsState extends ConsumerState<_UserSearchResults> {
   }
 
   Future<void> _load({bool reset = false}) async {
-    if (_loading || (!reset && !_hasMore)) return;
+    if ((!reset && _loading) || (!reset && !_hasMore)) return;
+    final generation = reset ? ++_generation : _generation;
     setState(() {
       _loading = true;
       _error = null;
       if (reset) {
         _items.clear();
         _hasMore = true;
+        _offset = 0;
       }
     });
     try {
       final page = await ref
           .read(pixivApiProvider)
           .search
-          .users(widget.word, offset: reset ? null : _items.length);
-      if (!mounted) return;
+          .users(widget.word, offset: _offset == 0 ? null : _offset);
+      if (!mounted || generation != _generation) return;
       setState(() {
         final known = _items.map((item) => item.user.id).toSet();
         _items.addAll(page.items.where((item) => known.add(item.user.id)));
+        _offset += page.items.length;
         _hasMore = page.nextUrl != null && page.items.isNotEmpty;
       });
     } catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted && generation == _generation) {
+        setState(() => _error = error);
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _generation) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -177,18 +186,27 @@ class _UserSearchResultsState extends ConsumerState<_UserSearchResults> {
 }
 
 class SearchPage extends ConsumerStatefulWidget {
-  const SearchPage({super.key, this.initialWord});
+  const SearchPage({
+    super.key,
+    this.initialWord,
+    this.initialKind = SearchKind.illust,
+  });
 
   final String? initialWord;
+  final SearchKind initialKind;
 
   @override
   ConsumerState<SearchPage> createState() => _SearchPageState();
 }
 
 class _SearchLanding extends ConsumerWidget {
-  const _SearchLanding({required this.onPick});
+  const _SearchLanding({required this.onPick, required this.onPickHistory});
 
   final ValueChanged<String> onPick;
+  final void Function(String value, SearchKind kind) onPickHistory;
+
+  static SearchKind _kindOf(String value) =>
+      value == SearchKind.user.name ? SearchKind.user : SearchKind.illust;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -208,7 +226,7 @@ class _SearchLanding extends ConsumerWidget {
         const SizedBox(height: 8),
         if (history.isEmpty)
           Text(
-            '还没有搜索记录。输入标签后回车即可保存，最多保留最近 20 条。',
+            '还没有搜索记录。输入关键词后回车即可保存，最多保留最近 20 条。',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.outline,
               height: 1.4,
@@ -231,12 +249,20 @@ class _SearchLanding extends ConsumerWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final tag in history)
+              for (final entry in history)
                 InputChip(
-                  label: Text(tag.value),
-                  onPressed: () => onPick(tag.value),
-                  onDeleted: () =>
-                      ref.read(searchHistoryRepositoryProvider).remove(tag.id),
+                  avatar: Icon(
+                    _kindOf(entry.kind) == SearchKind.user
+                        ? Icons.person_outline
+                        : Icons.tag_outlined,
+                    size: 18,
+                  ),
+                  label: Text(entry.value),
+                  onPressed: () =>
+                      onPickHistory(entry.value, _kindOf(entry.kind)),
+                  onDeleted: () => ref
+                      .read(searchHistoryRepositoryProvider)
+                      .remove(entry.id),
                 ),
             ],
           ),
@@ -294,6 +320,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   void initState() {
     super.initState();
     _searchFocusNode.addListener(_onSearchFocusChanged);
+    _kind = widget.initialKind;
     if (widget.initialWord != null && widget.initialWord!.isNotEmpty) {
       _word = widget.initialWord;
     }
@@ -361,6 +388,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _searchFocusNode.unfocus();
   }
 
+  void _pickHistory(String value, SearchKind kind) {
+    _controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+    setState(() {
+      _kind = kind;
+      _word = null;
+    });
+    unawaited(_submit(value, kind: kind));
+  }
+
   void _pickAutocomplete(Tag tag) {
     final word = tag.searchWord;
     _controller.value = TextEditingValue(
@@ -370,35 +409,36 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     unawaited(_submit(word));
   }
 
-  Future<void> _submit(String value) async {
+  Future<void> _submit(String value, {SearchKind? kind}) async {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
+    final searchKind = kind ?? _kind;
     _stopAutocomplete();
 
-    if (_kind == _SearchKind.illust) {
-      final illustId = PixivIllustInput.parseId(trimmed);
-      if (illustId != null) {
+    switch (PixivSearchInput.resolve(trimmed, searchKind)) {
+      case IllustIdSearchIntent(:final id):
         await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => IllustDetailPage(illustId: illustId),
-          ),
+          MaterialPageRoute(builder: (_) => IllustDetailPage(illustId: id)),
         );
-        return;
-      }
-      if (PixivIllustInput.looksLikePixivLink(trimmed)) {
+      case UserIdSearchIntent(:final id):
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => UserPage(userId: id)));
+      case InvalidSearchIntent(:final message):
         ref
             .read(operationFeedbackProvider)
-            .error(
-              key: 'search-input',
-              title: '无法识别作品链接',
-              message: '请检查链接中是否包含有效的作品 PID。',
-            );
-        return;
-      }
+            .info(key: 'search-input', title: '搜索输入无效', message: message);
+      case KeywordSearchIntent(:final kind, :final word):
+        await ref
+            .read(searchHistoryRepositoryProvider)
+            .add(word, kind: kind.name);
+        if (mounted) {
+          setState(() {
+            _kind = kind;
+            _word = word;
+          });
+        }
     }
-
-    await ref.read(searchHistoryRepositoryProvider).add(trimmed);
-    if (mounted) setState(() => _word = trimmed);
   }
 
   @override
@@ -452,6 +492,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 final nextKind = values.single;
                 setState(() {
                   _kind = nextKind;
+                  _word = null;
                   _autocompleteDebounce?.cancel();
                   _autocompleteGeneration++;
                   _clearAutocompleteState();
@@ -478,9 +519,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       _controller.text = tag;
                       _submit(tag);
                     },
+                    onPickHistory: _pickHistory,
                   )
                 : _kind == _SearchKind.user
-                ? _UserSearchResults(word: word)
+                ? _UserSearchResults(key: ValueKey('user:$word'), word: word)
                 : Column(
                     children: [
                       if (_hasAdvancedFilters)

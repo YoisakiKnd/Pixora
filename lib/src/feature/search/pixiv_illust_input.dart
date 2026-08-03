@@ -30,6 +30,37 @@ final class PixivIllustInput {
     return _positiveInt(uri.queryParameters['illust_id']);
   }
 
+  static int? parseUserId(String input) {
+    final value = input.trim();
+    if (value.isEmpty) return null;
+
+    final uri = Uri.tryParse(value);
+    if (uri == null) return null;
+
+    if (uri.scheme.toLowerCase() == 'pixiv' &&
+        uri.host.toLowerCase() == 'users' &&
+        uri.pathSegments.isNotEmpty) {
+      return _positiveInt(uri.pathSegments.first);
+    }
+
+    if (!_isPixivWebUri(uri)) return null;
+
+    final segments = uri.pathSegments;
+    final usersIndex = segments.indexOf('users');
+    if (usersIndex >= 0 && usersIndex + 1 < segments.length) {
+      final id = _positiveInt(segments[usersIndex + 1]);
+      if (id != null) return id;
+    }
+
+    if (segments.contains('member.php')) {
+      return _positiveInt(
+        uri.queryParameters['id'] ?? uri.queryParameters['user_id'],
+      );
+    }
+
+    return null;
+  }
+
   static bool looksLikePixivLink(String input) {
     final uri = Uri.tryParse(input.trim());
     if (uri == null) return false;

@@ -152,7 +152,7 @@ class OperationFeedbackController extends ChangeNotifier {
 String operationErrorMessage(Object error) =>
     error is PixivException ? error.userMessage : '操作失败，请稍后重试';
 
-class OperationFeedbackHost extends StatelessWidget {
+class OperationFeedbackHost extends StatefulWidget {
   const OperationFeedbackHost({
     super.key,
     required this.controller,
@@ -163,60 +163,67 @@ class OperationFeedbackHost extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Stack(
-    children: [
-      child,
-      Positioned.fill(
-        child: SafeArea(
-          minimum: const EdgeInsets.fromLTRB(16, 12, 16, 82),
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedBuilder(
-              animation: controller,
-              builder: (context, _) {
-                final notice = controller.notice;
-                return AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  reverseDuration: const Duration(milliseconds: 130),
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.15),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
-                    ),
-                  ),
-                  child: notice == null
-                      ? const SizedBox.shrink(key: ValueKey('empty'))
-                      : _OperationFeedbackCard(
-                          key: ValueKey('${notice.key}:${notice.kind}'),
-                          notice: notice,
-                          onDismiss: () => controller.dismiss(key: notice.key),
-                        ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
+  State<OperationFeedbackHost> createState() => _OperationFeedbackHostState();
 }
 
-class _OperationFeedbackCard extends StatelessWidget {
-  const _OperationFeedbackCard({
-    super.key,
-    required this.notice,
-    required this.onDismiss,
-  });
-
-  final OperationFeedbackNotice notice;
-  final VoidCallback onDismiss;
+class _OperationFeedbackHostState extends State<OperationFeedbackHost> {
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  String? _presentedSignature;
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onControllerChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
+  }
+
+  @override
+  void didUpdateWidget(covariant OperationFeedbackHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
+      _presentedSignature = null;
+    }
+    _scheduleSync();
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() => _scheduleSync();
+
+  void _scheduleSync() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _sync();
+    });
+  }
+
+  void _sync() {
+    final notice = widget.controller.notice;
+    final signature = notice == null
+        ? null
+        : '${notice.key}:${notice.kind}:${notice.title}:'
+              '${notice.message}:${notice.actionLabel}';
+    if (signature == _presentedSignature) return;
+
+    _presentedSignature = signature;
+    final messenger = _messengerKey.currentState;
+    if (notice == null) {
+      messenger?.removeCurrentSnackBar();
+      return;
+    }
+
+    messenger
+      ?..removeCurrentSnackBar()
+      ..showSnackBar(_buildSnackBar(notice));
+  }
+
+  SnackBar _buildSnackBar(OperationFeedbackNotice notice) {
     final theme = Theme.of(context);
     final colors = switch (notice.kind) {
       OperationFeedbackKind.pending || OperationFeedbackKind.info => (
@@ -235,84 +242,100 @@ class _OperationFeedbackCard extends StatelessWidget {
         icon: theme.colorScheme.error,
       ),
     };
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenWidth < 480;
+    final actionLabel = notice.actionLabel;
+    final hasAction = actionLabel != null;
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
-      child: Material(
-        color: colors.background,
-        elevation: 6,
-        shadowColor: Colors.black38,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-          child: Row(
-            children: [
-              SizedBox.square(
-                dimension: 24,
-                child: notice.kind == OperationFeedbackKind.pending
-                    ? CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: colors.icon,
-                      )
-                    : Icon(
-                        switch (notice.kind) {
-                          OperationFeedbackKind.success =>
-                            Icons.check_circle_outline,
-                          OperationFeedbackKind.error => Icons.error_outline,
-                          OperationFeedbackKind.info => Icons.info_outline,
-                          OperationFeedbackKind.pending => null,
-                        },
-                        size: 22,
-                        color: colors.icon,
-                      ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+    void dismissIfCurrent() {
+      if (identical(widget.controller.notice, notice)) {
+        widget.controller.dismiss(key: notice.key);
+      }
+    }
+
+    return SnackBar(
+      behavior: SnackBarBehavior.floating,
+      width: isNarrow ? null : 420,
+      margin: isNarrow ? const EdgeInsets.fromLTRB(12, 0, 12, 12) : null,
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      backgroundColor: colors.background,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      duration: const Duration(days: 1),
+      content: Semantics(
+        liveRegion: true,
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 20,
+              child: notice.kind == OperationFeedbackKind.pending
+                  ? CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.icon,
+                    )
+                  : Icon(
+                      switch (notice.kind) {
+                        OperationFeedbackKind.success =>
+                          Icons.check_circle_outline,
+                        OperationFeedbackKind.error => Icons.error_outline,
+                        OperationFeedbackKind.info => Icons.info_outline,
+                        OperationFeedbackKind.pending => null,
+                      },
+                      size: 19,
+                      color: colors.icon,
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notice.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.foreground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (notice.message case final message?)
                     Text(
-                      notice.title,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: colors.foreground,
-                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (notice.message case final message?) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        message,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.foreground,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                ],
               ),
-              if (notice.actionLabel case final actionLabel?)
-                TextButton(
-                  onPressed: () {
-                    notice.onAction?.call();
-                    onDismiss();
-                  },
-                  child: Text(actionLabel),
-                )
-              else if (notice.kind != OperationFeedbackKind.pending)
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: '关闭',
-                  onPressed: onDismiss,
-                  icon: Icon(Icons.close, size: 18, color: colors.foreground),
-                ),
-            ],
-          ),
+            ),
+            if (!hasAction && notice.kind != OperationFeedbackKind.pending)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: '关闭',
+                onPressed: dismissIfCurrent,
+                icon: Icon(Icons.close, size: 18, color: colors.foreground),
+              ),
+          ],
         ),
       ),
+      action: actionLabel == null
+          ? null
+          : SnackBarAction(
+              label: actionLabel,
+              textColor: colors.icon,
+              onPressed: () {
+                notice.onAction?.call();
+                dismissIfCurrent();
+              },
+            ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) =>
+      ScaffoldMessenger(key: _messengerKey, child: widget.child);
 }

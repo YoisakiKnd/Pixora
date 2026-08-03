@@ -2509,6 +2509,16 @@ class $SearchHistoryTable extends SearchHistory
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('illust'),
+  );
   static const VerificationMeta _searchedAtMeta = const VerificationMeta(
     'searchedAt',
   );
@@ -2521,7 +2531,7 @@ class $SearchHistoryTable extends SearchHistory
     requiredDuringInsert: true,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, value, searchedAt];
+  List<GeneratedColumn> get $columns => [id, value, kind, searchedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2545,6 +2555,12 @@ class $SearchHistoryTable extends SearchHistory
     } else if (isInserting) {
       context.missing(_valueMeta);
     }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
     if (data.containsKey('searched_at')) {
       context.handle(
         _searchedAtMeta,
@@ -2560,7 +2576,7 @@ class $SearchHistoryTable extends SearchHistory
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
   List<Set<GeneratedColumn>> get uniqueKeys => [
-    {value},
+    {value, kind},
   ];
   @override
   SearchHistoryData map(Map<String, dynamic> data, {String? tablePrefix}) {
@@ -2573,6 +2589,10 @@ class $SearchHistoryTable extends SearchHistory
       value: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}value'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
       )!,
       searchedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -2591,10 +2611,12 @@ class SearchHistoryData extends DataClass
     implements Insertable<SearchHistoryData> {
   final int id;
   final String value;
+  final String kind;
   final DateTime searchedAt;
   const SearchHistoryData({
     required this.id,
     required this.value,
+    required this.kind,
     required this.searchedAt,
   });
   @override
@@ -2602,6 +2624,7 @@ class SearchHistoryData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['value'] = Variable<String>(value);
+    map['kind'] = Variable<String>(kind);
     map['searched_at'] = Variable<DateTime>(searchedAt);
     return map;
   }
@@ -2610,6 +2633,7 @@ class SearchHistoryData extends DataClass
     return SearchHistoryCompanion(
       id: Value(id),
       value: Value(value),
+      kind: Value(kind),
       searchedAt: Value(searchedAt),
     );
   }
@@ -2622,6 +2646,7 @@ class SearchHistoryData extends DataClass
     return SearchHistoryData(
       id: serializer.fromJson<int>(json['id']),
       value: serializer.fromJson<String>(json['value']),
+      kind: serializer.fromJson<String>(json['kind']),
       searchedAt: serializer.fromJson<DateTime>(json['searchedAt']),
     );
   }
@@ -2631,20 +2656,27 @@ class SearchHistoryData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'value': serializer.toJson<String>(value),
+      'kind': serializer.toJson<String>(kind),
       'searchedAt': serializer.toJson<DateTime>(searchedAt),
     };
   }
 
-  SearchHistoryData copyWith({int? id, String? value, DateTime? searchedAt}) =>
-      SearchHistoryData(
-        id: id ?? this.id,
-        value: value ?? this.value,
-        searchedAt: searchedAt ?? this.searchedAt,
-      );
+  SearchHistoryData copyWith({
+    int? id,
+    String? value,
+    String? kind,
+    DateTime? searchedAt,
+  }) => SearchHistoryData(
+    id: id ?? this.id,
+    value: value ?? this.value,
+    kind: kind ?? this.kind,
+    searchedAt: searchedAt ?? this.searchedAt,
+  );
   SearchHistoryData copyWithCompanion(SearchHistoryCompanion data) {
     return SearchHistoryData(
       id: data.id.present ? data.id.value : this.id,
       value: data.value.present ? data.value.value : this.value,
+      kind: data.kind.present ? data.kind.value : this.kind,
       searchedAt: data.searchedAt.present
           ? data.searchedAt.value
           : this.searchedAt,
@@ -2656,45 +2688,52 @@ class SearchHistoryData extends DataClass
     return (StringBuffer('SearchHistoryData(')
           ..write('id: $id, ')
           ..write('value: $value, ')
+          ..write('kind: $kind, ')
           ..write('searchedAt: $searchedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, value, searchedAt);
+  int get hashCode => Object.hash(id, value, kind, searchedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SearchHistoryData &&
           other.id == this.id &&
           other.value == this.value &&
+          other.kind == this.kind &&
           other.searchedAt == this.searchedAt);
 }
 
 class SearchHistoryCompanion extends UpdateCompanion<SearchHistoryData> {
   final Value<int> id;
   final Value<String> value;
+  final Value<String> kind;
   final Value<DateTime> searchedAt;
   const SearchHistoryCompanion({
     this.id = const Value.absent(),
     this.value = const Value.absent(),
+    this.kind = const Value.absent(),
     this.searchedAt = const Value.absent(),
   });
   SearchHistoryCompanion.insert({
     this.id = const Value.absent(),
     required String value,
+    this.kind = const Value.absent(),
     required DateTime searchedAt,
   }) : value = Value(value),
        searchedAt = Value(searchedAt);
   static Insertable<SearchHistoryData> custom({
     Expression<int>? id,
     Expression<String>? value,
+    Expression<String>? kind,
     Expression<DateTime>? searchedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (value != null) 'value': value,
+      if (kind != null) 'kind': kind,
       if (searchedAt != null) 'searched_at': searchedAt,
     });
   }
@@ -2702,11 +2741,13 @@ class SearchHistoryCompanion extends UpdateCompanion<SearchHistoryData> {
   SearchHistoryCompanion copyWith({
     Value<int>? id,
     Value<String>? value,
+    Value<String>? kind,
     Value<DateTime>? searchedAt,
   }) {
     return SearchHistoryCompanion(
       id: id ?? this.id,
       value: value ?? this.value,
+      kind: kind ?? this.kind,
       searchedAt: searchedAt ?? this.searchedAt,
     );
   }
@@ -2720,6 +2761,9 @@ class SearchHistoryCompanion extends UpdateCompanion<SearchHistoryData> {
     if (value.present) {
       map['value'] = Variable<String>(value.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
     if (searchedAt.present) {
       map['searched_at'] = Variable<DateTime>(searchedAt.value);
     }
@@ -2731,6 +2775,7 @@ class SearchHistoryCompanion extends UpdateCompanion<SearchHistoryData> {
     return (StringBuffer('SearchHistoryCompanion(')
           ..write('id: $id, ')
           ..write('value: $value, ')
+          ..write('kind: $kind, ')
           ..write('searchedAt: $searchedAt')
           ..write(')'))
         .toString();
@@ -3995,12 +4040,14 @@ typedef $$SearchHistoryTableCreateCompanionBuilder =
     SearchHistoryCompanion Function({
       Value<int> id,
       required String value,
+      Value<String> kind,
       required DateTime searchedAt,
     });
 typedef $$SearchHistoryTableUpdateCompanionBuilder =
     SearchHistoryCompanion Function({
       Value<int> id,
       Value<String> value,
+      Value<String> kind,
       Value<DateTime> searchedAt,
     });
 
@@ -4020,6 +4067,11 @@ class $$SearchHistoryTableFilterComposer
 
   ColumnFilters<String> get value => $composableBuilder(
     column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4048,6 +4100,11 @@ class $$SearchHistoryTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get searchedAt => $composableBuilder(
     column: $table.searchedAt,
     builder: (column) => ColumnOrderings(column),
@@ -4068,6 +4125,9 @@ class $$SearchHistoryTableAnnotationComposer
 
   GeneratedColumn<String> get value =>
       $composableBuilder(column: $table.value, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 
   GeneratedColumn<DateTime> get searchedAt => $composableBuilder(
     column: $table.searchedAt,
@@ -4112,20 +4172,24 @@ class $$SearchHistoryTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> value = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<DateTime> searchedAt = const Value.absent(),
               }) => SearchHistoryCompanion(
                 id: id,
                 value: value,
+                kind: kind,
                 searchedAt: searchedAt,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 required String value,
+                Value<String> kind = const Value.absent(),
                 required DateTime searchedAt,
               }) => SearchHistoryCompanion.insert(
                 id: id,
                 value: value,
+                kind: kind,
                 searchedAt: searchedAt,
               ),
           withReferenceMapper: (p0) => p0

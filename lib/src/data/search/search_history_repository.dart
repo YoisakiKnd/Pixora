@@ -11,19 +11,22 @@ class SearchHistoryRepository {
     _db.searchHistory,
   )..orderBy([(t) => OrderingTerm.desc(t.searchedAt)])).watch();
 
-  Future<void> add(String value) async {
+  Future<void> add(String value, {String kind = 'illust'}) async {
     final normalized = value.trim();
     if (normalized.isEmpty) return;
     await _db.transaction(() async {
-      final existing = await (_db.select(
-        _db.searchHistory,
-      )..where((t) => t.value.equals(normalized))).getSingleOrNull();
+      final existing =
+          await (_db.select(
+                _db.searchHistory,
+              )..where((t) => t.value.equals(normalized) & t.kind.equals(kind)))
+              .getSingleOrNull();
       if (existing == null) {
         await _db
             .into(_db.searchHistory)
             .insert(
               SearchHistoryCompanion.insert(
                 value: normalized,
+                kind: Value(kind),
                 searchedAt: DateTime.now(),
               ),
             );
