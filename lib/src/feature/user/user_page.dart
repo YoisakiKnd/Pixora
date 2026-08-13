@@ -8,6 +8,7 @@ import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../illust/illust_grid.dart';
 import '../settings/settings_page.dart';
+import 'follow_button.dart';
 
 /// 用户主页。`userId` 传当前登录用户时即「我的」页。
 class UserPage extends ConsumerStatefulWidget {
@@ -29,7 +30,6 @@ class UserPage extends ConsumerStatefulWidget {
 class _UserPageState extends ConsumerState<UserPage> {
   UserDetail? _detail;
   Object? _error;
-  bool _following = false;
 
   @override
   void initState() {
@@ -48,51 +48,6 @@ class _UserPageState extends ConsumerState<UserPage> {
       if (mounted) setState(() => _detail = detail);
     } catch (e) {
       if (mounted) setState(() => _error = e);
-    }
-  }
-
-  Future<void> _toggleFollow() async {
-    final detail = _detail;
-    if (detail == null || _following) return;
-
-    setState(() => _following = true);
-    final target = !detail.user.isFollowed;
-    setState(
-      () => _detail = UserDetail(
-        user: detail.user.copyWith(isFollowed: target),
-        profile: detail.profile,
-        profilePublicity: detail.profilePublicity,
-        workspace: detail.workspace,
-      ),
-    );
-    final feedback = ref.read(operationFeedbackProvider);
-    feedback.pending(
-      key: 'follow',
-      title: target ? '正在关注画师' : '正在取消关注',
-      delay: const Duration(milliseconds: 350),
-    );
-
-    try {
-      final users = ref.read(pixivApiProvider).user;
-      if (target) {
-        await users.follow(widget.userId);
-      } else {
-        await users.unfollow(widget.userId);
-      }
-      ref
-          .read(objectPoolProvider)
-          .users
-          .update(widget.userId, (u) => u.copyWith(isFollowed: target));
-      feedback.success(key: 'follow', title: target ? '已关注画师' : '已取消关注');
-    } on PixivException catch (e) {
-      if (mounted) setState(() => _detail = detail);
-      feedback.error(
-        key: 'follow',
-        title: target ? '关注失败' : '取消关注失败',
-        message: e.userMessage,
-      );
-    } finally {
-      if (mounted) setState(() => _following = false);
     }
   }
 
@@ -190,16 +145,7 @@ class _UserPageState extends ConsumerState<UserPage> {
                   ],
                 ),
               ),
-              if (!isSelf)
-                FilledButton.tonal(
-                  onPressed: _following ? null : _toggleFollow,
-                  child: _following
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(detail.user.isFollowed ? '已关注' : '关注'),
-                ),
+              if (!isSelf) FollowButton(user: detail.user),
             ],
           ),
           const SizedBox(height: 12),

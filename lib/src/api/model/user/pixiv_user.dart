@@ -9,6 +9,7 @@ class PixivUser {
     required this.account,
     this.profileImageUrls = ProfileImageUrls.empty,
     this.isFollowed = false,
+    this.isPrivatelyFollowed = false,
     this.isAccessBlockingUser = false,
     this.comment,
   });
@@ -20,6 +21,10 @@ class PixivUser {
   final String account;
   final ProfileImageUrls profileImageUrls;
   final bool isFollowed;
+
+  /// 是否私密关注。列表接口不返回这个字段，由关注列表 service 层根据
+  /// `restrict` 标注，用于「再次点击即可取消私密关注」的切换逻辑。
+  final bool isPrivatelyFollowed;
   final bool isAccessBlockingUser;
   final String? comment;
 
@@ -34,6 +39,7 @@ class PixivUser {
       asMap(json['profile_image_urls']) ?? const {},
     ),
     isFollowed: asBool(json['is_followed']),
+    isPrivatelyFollowed: asBool(json['is_privately_followed']),
     isAccessBlockingUser: asBool(json['is_access_blocking_user']),
     comment: asStringOrNull(json['comment']),
   );
@@ -42,15 +48,17 @@ class PixivUser {
 
   bool get isPlaceholder => id == 0;
 
-  PixivUser copyWith({bool? isFollowed}) => PixivUser(
-    id: id,
-    name: name,
-    account: account,
-    profileImageUrls: profileImageUrls,
-    isFollowed: isFollowed ?? this.isFollowed,
-    isAccessBlockingUser: isAccessBlockingUser,
-    comment: comment,
-  );
+  PixivUser copyWith({bool? isFollowed, bool? isPrivatelyFollowed}) =>
+      PixivUser(
+        id: id,
+        name: name,
+        account: account,
+        profileImageUrls: profileImageUrls,
+        isFollowed: isFollowed ?? this.isFollowed,
+        isPrivatelyFollowed: isPrivatelyFollowed ?? this.isPrivatelyFollowed,
+        isAccessBlockingUser: isAccessBlockingUser,
+        comment: comment,
+      );
 }
 
 /// 搜索用户 / 推荐用户接口返回的形状：user + 其代表作。
@@ -75,5 +83,12 @@ class UserPreview {
     illustsJson: asMapList(json['illusts']),
     novelsJson: asMapList(json['novels']),
     isMuted: asBool(json['is_muted']),
+  );
+
+  UserPreview copyWithUser(PixivUser user) => UserPreview(
+    user: user,
+    illustsJson: illustsJson,
+    novelsJson: novelsJson,
+    isMuted: isMuted,
   );
 }

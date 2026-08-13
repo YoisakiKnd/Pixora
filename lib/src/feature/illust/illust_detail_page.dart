@@ -12,7 +12,9 @@ import '../../widget/progressive_pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../download/downloads_page.dart';
 import '../search/search_page.dart';
+import '../user/follow_button.dart';
 import '../user/user_page.dart';
+import 'bookmark_toggle.dart';
 import 'illust_grid.dart';
 import 'ugoira_player.dart';
 
@@ -30,8 +32,6 @@ class IllustDetailPage extends ConsumerStatefulWidget {
 class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
   Illust? _illust;
   Object? _error;
-  bool _bookmarking = false;
-  bool _following = false;
   bool _preparingDownload = false;
   final _scrollController = ScrollController();
   late final Paginator<Illust> _relatedPaginator;
@@ -123,95 +123,6 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
       if (mounted) setState(() => _illust = merged);
     } catch (e) {
       if (mounted) setState(() => _error = e);
-    }
-  }
-
-  Future<void> _toggleBookmark() async {
-    final current = _illust;
-    if (current == null || _bookmarking) return;
-
-    setState(() => _bookmarking = true);
-    final target = !current.isBookmarked;
-
-    // 乐观更新，失败再回滚。
-    _applyBookmark(target);
-    final feedback = ref.read(operationFeedbackProvider);
-    feedback.pending(
-      key: 'bookmark',
-      title: target ? '正在收藏作品' : '正在取消收藏',
-      delay: const Duration(milliseconds: 350),
-    );
-
-    try {
-      final bookmark = ref.read(pixivApiProvider).bookmark;
-      if (target) {
-        await bookmark.addIllust(current.id);
-        feedback.success(key: 'bookmark', title: '已收藏');
-      } else {
-        await bookmark.removeIllust(current.id);
-        feedback.success(key: 'bookmark', title: '已取消收藏');
-      }
-    } on PixivException catch (e) {
-      _applyBookmark(!target);
-      feedback.error(
-        key: 'bookmark',
-        title: target ? '收藏失败' : '取消收藏失败',
-        message: e.userMessage,
-      );
-    } finally {
-      if (mounted) setState(() => _bookmarking = false);
-    }
-  }
-
-  void _applyBookmark(bool value) {
-    final updated = ref
-        .read(objectPoolProvider)
-        .illusts
-        .update(
-          widget.illustId,
-          (current) => current.copyWithBookmark(
-            isBookmarked: value,
-            totalBookmarks: current.totalBookmarks + (value ? 1 : -1),
-          ),
-        );
-    if (updated != null && mounted) setState(() => _illust = updated);
-  }
-
-  Future<void> _toggleFollow() async {
-    final current = _illust;
-    if (current == null || _following) return;
-    final target = !current.user.isFollowed;
-    setState(() {
-      _following = true;
-      _illust = current.copyWithUser(current.user.copyWith(isFollowed: target));
-    });
-    final feedback = ref.read(operationFeedbackProvider);
-    feedback.pending(
-      key: 'follow',
-      title: target ? '正在关注画师' : '正在取消关注',
-      delay: const Duration(milliseconds: 350),
-    );
-    try {
-      final users = ref.read(pixivApiProvider).user;
-      if (target) {
-        await users.follow(current.user.id);
-      } else {
-        await users.unfollow(current.user.id);
-      }
-      ref
-          .read(objectPoolProvider)
-          .users
-          .update(current.user.id, (user) => user.copyWith(isFollowed: target));
-      feedback.success(key: 'follow', title: target ? '已关注画师' : '已取消关注');
-    } on PixivException catch (error) {
-      if (mounted) setState(() => _illust = current);
-      feedback.error(
-        key: 'follow',
-        title: target ? '关注失败' : '取消关注失败',
-        message: error.userMessage,
-      );
-    } finally {
-      if (mounted) setState(() => _following = false);
     }
   }
 
@@ -488,17 +399,7 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        FilledButton.tonal(
-                          onPressed: _following ? null : _toggleFollow,
-                          child: _following
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(illust.user.isFollowed ? '已关注' : '关注'),
-                        ),
+                        FollowButton(user: illust.user),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -603,19 +504,9 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
               ),
             ),
             const SizedBox(width: 8),
-            IconButton.filledTonal(
-              tooltip: '收藏 / 收藏分类',
-              onPressed: _bookmarking ? null : _toggleBookmark,
-              icon: _bookmarking
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      illust.isBookmarked
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                    ),
+            BookmarkButton(
+              illust: illust,
+              variant: BookmarkButtonVariant.tonal,
             ),
           ],
         ),

@@ -8,6 +8,7 @@ import '../../data/settings/settings_controller.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
+import 'bookmark_toggle.dart';
 import 'illust_actions_sheet.dart';
 import 'illust_detail_page.dart';
 
@@ -350,7 +351,7 @@ class _IllustCardBodyState extends ConsumerState<_IllustCardBody> {
                 bottom: widget.bookmarkCorner.isTop ? null : 6,
                 left: widget.bookmarkCorner.isLeft ? 6 : null,
                 right: widget.bookmarkCorner.isLeft ? null : 6,
-                child: _BookmarkButton(
+                child: BookmarkButton(
                   illust: current,
                   onBookmarked: widget.onBookmarked,
                 ),
@@ -409,99 +410,6 @@ class _LabelBadge extends StatelessWidget {
         fontSize: 10,
         fontWeight: FontWeight.bold,
       ),
-    ),
-  );
-}
-
-class _BookmarkButton extends ConsumerStatefulWidget {
-  const _BookmarkButton({required this.illust, this.onBookmarked});
-
-  final Illust illust;
-  final VoidCallback? onBookmarked;
-
-  @override
-  ConsumerState<_BookmarkButton> createState() => _BookmarkButtonState();
-}
-
-class _BookmarkButtonState extends ConsumerState<_BookmarkButton> {
-  bool _busy = false;
-
-  Future<void> _toggle() async {
-    if (_busy) return;
-    final target = !widget.illust.isBookmarked;
-    setState(() => _busy = true);
-    ref
-        .read(objectPoolProvider)
-        .illusts
-        .update(
-          widget.illust.id,
-          (item) => item.copyWithBookmark(
-            isBookmarked: target,
-            totalBookmarks: item.totalBookmarks + (target ? 1 : -1),
-          ),
-        );
-    final feedback = ref.read(operationFeedbackProvider);
-    feedback.pending(
-      key: 'bookmark',
-      title: target ? '正在收藏作品' : '正在取消收藏',
-      delay: const Duration(milliseconds: 350),
-    );
-    try {
-      final service = ref.read(pixivApiProvider).bookmark;
-      if (target) {
-        await service.addIllust(widget.illust.id);
-        widget.onBookmarked?.call();
-        feedback.success(key: 'bookmark', title: '已收藏');
-      } else {
-        await service.removeIllust(widget.illust.id);
-        feedback.success(key: 'bookmark', title: '已取消收藏');
-      }
-    } on PixivException catch (error) {
-      ref
-          .read(objectPoolProvider)
-          .illusts
-          .update(
-            widget.illust.id,
-            (item) => item.copyWithBookmark(
-              isBookmarked: !target,
-              totalBookmarks: item.totalBookmarks + (target ? -1 : 1),
-            ),
-          );
-      feedback.error(
-        key: 'bookmark',
-        title: target ? '收藏失败' : '取消收藏失败',
-        message: error.userMessage,
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.black54,
-    shape: const CircleBorder(),
-    child: IconButton(
-      visualDensity: VisualDensity.compact,
-      iconSize: 19,
-      tooltip: widget.illust.isBookmarked ? '取消收藏' : '收藏',
-      onPressed: _busy ? null : _toggle,
-      icon: _busy
-          ? const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : Icon(
-              widget.illust.isBookmarked
-                  ? Icons.favorite
-                  : Icons.favorite_border,
-              color: widget.illust.isBookmarked
-                  ? const Color(0xFFFF4D6D)
-                  : Colors.white,
-            ),
     ),
   );
 }

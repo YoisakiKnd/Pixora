@@ -64,6 +64,7 @@ class Illust {
     this.totalBookmarks = 0,
     this.totalComments,
     this.isBookmarked = false,
+    this.isBookmarkedPrivate = false,
     this.visible = true,
     this.isMuted = false,
     this.illustAiType = 0,
@@ -105,6 +106,10 @@ class Illust {
   /// 只有部分端点返回。
   final int? totalComments;
   final bool isBookmarked;
+
+  /// 是否已私密收藏。列表接口不返回这个字段，由收藏列表 service 层根据
+  /// `restrict` 标注，用于「再次点击即可取消私密收藏」的切换逻辑。
+  final bool isBookmarkedPrivate;
 
   /// **列表接口会返回 `visible: false` 的占位对象**：id 有值但 title 与
   /// image_urls 全空。不过滤就是满屏白卡片，见 [isPlaceholder]。
@@ -234,6 +239,7 @@ class Illust {
       totalView: incoming.totalView,
       totalBookmarks: incoming.totalBookmarks,
       isBookmarked: incoming.isBookmarked,
+      isBookmarkedPrivate: incoming.isBookmarkedPrivate,
       visible: incoming.visible,
       isMuted: incoming.isMuted,
       illustAiType: incoming.illustAiType,
@@ -266,6 +272,7 @@ class Illust {
     totalBookmarks: totalBookmarks,
     totalComments: totalComments,
     isBookmarked: isBookmarked,
+    isBookmarkedPrivate: isBookmarkedPrivate,
     visible: visible,
     isMuted: isMuted,
     illustAiType: illustAiType,
@@ -273,33 +280,40 @@ class Illust {
   );
 
   /// 本地乐观更新收藏状态用。
-  Illust copyWithBookmark({required bool isBookmarked, int? totalBookmarks}) =>
-      Illust(
-        id: id,
-        title: title,
-        type: type,
-        imageUrls: imageUrls,
-        user: user,
-        caption: caption,
-        restrict: restrict,
-        tags: tags,
-        tools: tools,
-        createDate: createDate,
-        pageCount: pageCount,
-        width: width,
-        height: height,
-        sanityLevel: sanityLevel,
-        xRestrict: xRestrict,
-        series: series,
-        singlePageOriginalUrl: singlePageOriginalUrl,
-        metaPages: metaPages,
-        totalView: totalView,
-        totalBookmarks: totalBookmarks ?? this.totalBookmarks,
-        totalComments: totalComments,
-        isBookmarked: isBookmarked,
-        visible: visible,
-        isMuted: isMuted,
-        illustAiType: illustAiType,
-        isFullVersion: isFullVersion,
-      );
+  ///
+  /// [isBookmarked] 是公开收藏，[isBookmarkedPrivate] 是私密收藏。两者可选，
+  /// 未传时保持原值。
+  Illust copyWithBookmark({
+    bool? isBookmarked,
+    bool? isBookmarkedPrivate,
+    int? totalBookmarks,
+  }) => Illust(
+    id: id,
+    title: title,
+    type: type,
+    imageUrls: imageUrls,
+    user: user,
+    caption: caption,
+    restrict: restrict,
+    tags: tags,
+    tools: tools,
+    createDate: createDate,
+    pageCount: pageCount,
+    width: width,
+    height: height,
+    sanityLevel: sanityLevel,
+    xRestrict: xRestrict,
+    series: series,
+    singlePageOriginalUrl: singlePageOriginalUrl,
+    metaPages: metaPages,
+    totalView: totalView,
+    totalBookmarks: totalBookmarks ?? this.totalBookmarks,
+    totalComments: totalComments,
+    isBookmarked: isBookmarked ?? this.isBookmarked,
+    isBookmarkedPrivate: isBookmarkedPrivate ?? this.isBookmarkedPrivate,
+    visible: visible,
+    isMuted: isMuted,
+    illustAiType: illustAiType,
+    isFullVersion: isFullVersion,
+  );
 }

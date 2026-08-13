@@ -6,6 +6,7 @@ import '../../app/providers.dart';
 import '../../widget/operation_feedback.dart';
 import '../download/downloads_page.dart';
 import '../mute/mute_actions.dart';
+import 'bookmark_toggle.dart';
 import 'illust_detail_page.dart';
 
 Future<void> showIllustActionsSheet(
@@ -39,51 +40,12 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
       ref.read(objectPoolProvider).illusts.get(widget.illust.id) ??
       widget.illust;
 
-  Future<void> _toggleBookmark() async {
+  Future<void> _toggleBookmark({required bool private}) async {
     if (_bookmarking) return;
-    final current = _current;
-    final target = !current.isBookmarked;
     setState(() => _bookmarking = true);
-    _applyBookmark(target);
-    final feedback = ref.read(operationFeedbackProvider);
-    feedback.pending(
-      key: 'bookmark',
-      title: target ? '正在收藏作品' : '正在取消收藏',
-      delay: const Duration(milliseconds: 350),
-    );
-    try {
-      final bookmark = ref.read(pixivApiProvider).bookmark;
-      if (target) {
-        await bookmark.addIllust(current.id);
-        feedback.success(key: 'bookmark', title: '已收藏');
-      } else {
-        await bookmark.removeIllust(current.id);
-        feedback.success(key: 'bookmark', title: '已取消收藏');
-      }
-      if (mounted) Navigator.of(context).pop();
-    } on PixivException catch (error) {
-      _applyBookmark(!target);
-      feedback.error(
-        key: 'bookmark',
-        title: target ? '收藏失败' : '取消收藏失败',
-        message: error.userMessage,
-      );
-    } finally {
-      if (mounted) setState(() => _bookmarking = false);
-    }
-  }
-
-  void _applyBookmark(bool value) {
-    ref
-        .read(objectPoolProvider)
-        .illusts
-        .update(
-          widget.illust.id,
-          (current) => current.copyWithBookmark(
-            isBookmarked: value,
-            totalBookmarks: current.totalBookmarks + (value ? 1 : -1),
-          ),
-        );
+    final result = await toggleBookmark(ref, _current, private: private);
+    if (result != null && mounted) Navigator.of(context).pop();
+    if (mounted) setState(() => _bookmarking = false);
   }
 
   Future<void> _download() async {
@@ -165,6 +127,8 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
   Widget build(BuildContext context) {
     final current = _current;
     final theme = Theme.of(context);
+    final isPrivateBookmarked = current.isBookmarkedPrivate;
+    final isBookmarked = current.isBookmarked || isPrivateBookmarked;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -192,15 +156,24 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
               children: [
                 Expanded(
                   child: _QuickAction(
-                    icon: current.isBookmarked
+                    icon: isPrivateBookmarked
+                        ? Icons.lock
+                        : isBookmarked
                         ? Icons.favorite
                         : Icons.favorite_border,
-                    label: current.isBookmarked ? '取消收藏' : '收藏',
-                    color: current.isBookmarked
+                    label: isPrivateBookmarked
+                        ? '私密收藏'
+                        : isBookmarked
+                        ? '取消收藏'
+                        : '收藏',
+                    color: isPrivateBookmarked
+                        ? const Color(0xFFB388FF)
+                        : isBookmarked
                         ? const Color(0xFFFF4060)
                         : theme.colorScheme.primary,
                     busy: _bookmarking,
-                    onTap: _toggleBookmark,
+                    onTap: () => _toggleBookmark(private: false),
+                    onLongPress: () => _toggleBookmark(private: true),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -243,6 +216,7 @@ class _QuickAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.onLongPress,
     this.color,
     this.busy = false,
   });
@@ -250,6 +224,7 @@ class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final Color? color;
   final bool busy;
 
@@ -259,6 +234,7 @@ class _QuickAction extends StatelessWidget {
     borderRadius: BorderRadius.circular(14),
     child: InkWell(
       onTap: busy ? null : onTap,
+      onLongPress: busy ? null : onLongPress,
       borderRadius: BorderRadius.circular(14),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),

@@ -70,6 +70,40 @@ void main() {
       expect(merged.totalBookmarks, 999);
       expect(merged.isBookmarked, isTrue);
     });
+
+    test('mergeWith 采用新数据的私密收藏标记', () {
+      final old = Illust.fromJson(_listJson());
+      final incoming = Illust.fromJson(
+        _listJson(),
+      ).copyWithBookmark(isBookmarkedPrivate: true);
+
+      final merged = old.mergeWith(incoming);
+
+      expect(merged.isBookmarkedPrivate, isTrue);
+    });
+  });
+
+  group('Illust 收藏状态本地更新', () {
+    test('copyWithBookmark 只改私密标记时保留公开状态', () {
+      final illust = Illust.fromJson({..._listJson(), 'is_bookmarked': false});
+      final updated = illust.copyWithBookmark(isBookmarkedPrivate: true);
+
+      expect(updated.isBookmarked, isFalse);
+      expect(updated.isBookmarkedPrivate, isTrue);
+    });
+
+    test('copyWithBookmark 同时更新公开与私密状态', () {
+      final illust = Illust.fromJson(_listJson());
+      final updated = illust.copyWithBookmark(
+        isBookmarked: true,
+        isBookmarkedPrivate: false,
+        totalBookmarks: 11,
+      );
+
+      expect(updated.isBookmarked, isTrue);
+      expect(updated.isBookmarkedPrivate, isFalse);
+      expect(updated.totalBookmarks, 11);
+    });
   });
 
   group('Illust 占位对象', () {

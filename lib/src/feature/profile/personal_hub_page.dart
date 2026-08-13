@@ -6,6 +6,7 @@ import '../../data/auth/auth_state.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../download/downloads_page.dart';
+import '../user/following_list.dart';
 import '../user/user_page.dart';
 import 'account_info_page.dart';
 import '../history/browse_history_page.dart';
@@ -91,6 +92,16 @@ class PersonalHubPage extends ConsumerWidget {
             margin: EdgeInsets.zero,
             child: Column(
               children: [
+                if (account != null)
+                  _HubTile(
+                    icon: Icons.people_outline,
+                    title: '关注画师',
+                    subtitle: '公开与私密关注的画师列表',
+                    onTap: () => _push(
+                      context,
+                      FollowingListPage(userId: account.userId),
+                    ),
+                  ),
                 _HubTile(
                   icon: Icons.history,
                   title: '浏览历史',

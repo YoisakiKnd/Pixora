@@ -52,12 +52,28 @@ class UserService extends PixivService {
     int userId, {
     Restrict restrict = Restrict.public,
     int? offset,
-  }) async => parseUserPreviewPage(
-    await callGet(
-      Endpoints.userFollowing,
-      query: {'user_id': userId, 'restrict': restrict.wire, 'offset': offset},
-    ),
-  );
+  }) async {
+    final page = parseUserPreviewPage(
+      await callGet(
+        Endpoints.userFollowing,
+        query: {'user_id': userId, 'restrict': restrict.wire, 'offset': offset},
+      ),
+    );
+    // 关注列表端点不返回逐用户的 is_followed 标记，按列表类型确定性标注，
+    // 供关注按钮区分「公开关注」与「私密关注」的切换。
+    return switch (restrict) {
+      Restrict.private => page.map(
+        (p) => p.copyWithUser(
+          p.user.copyWith(isFollowed: false, isPrivatelyFollowed: true),
+        ),
+      ),
+      Restrict.public => page.map(
+        (p) => p.copyWithUser(
+          p.user.copyWith(isFollowed: true, isPrivatelyFollowed: false),
+        ),
+      ),
+    };
+  }
 
   /// 粉丝列表。
   Future<PageResponse<UserPreview>> followers(

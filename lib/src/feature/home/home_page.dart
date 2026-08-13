@@ -11,6 +11,7 @@ import '../illust/illust_grid.dart';
 import '../profile/personal_hub_page.dart';
 import '../search/search_page.dart';
 import '../settings/ranking_preferences_page.dart';
+import '../user/following_list.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -203,9 +204,9 @@ class _ActivityTab extends ConsumerWidget {
     if (userId == null) {
       return const UserHint(
         icon: Icons.login,
-        title: '登录后查看动态与收藏',
+        title: '登录后查看动态、收藏与关注',
         body:
-            '收藏统一从这里进入公开 / 私密列表。\n'
+            '收藏与关注统一从这里进入公开 / 私密列表。\n'
             '若登录后仍加载失败，请确认系统代理 / VPN 已对本应用生效。',
         tone: UserHintTone.info,
       );
@@ -219,7 +220,7 @@ class _ActivityTab extends ConsumerWidget {
             tabs: [
               Tab(text: '动态'),
               Tab(text: '收藏'),
-              Tab(text: '私密'),
+              Tab(text: '关注'),
             ],
           ),
           Expanded(
@@ -233,8 +234,8 @@ class _ActivityTab extends ConsumerWidget {
                     idOf: (item) => item.id,
                   ),
                 ),
-                _BookmarkGrid(userId: userId, restrict: Restrict.public),
-                _BookmarkGrid(userId: userId, restrict: Restrict.private),
+                _BookmarkListView(userId: userId),
+                FollowingListView(userId: userId),
               ],
             ),
           ),
@@ -244,8 +245,59 @@ class _ActivityTab extends ConsumerWidget {
   }
 }
 
+/// 收藏标签：顶部用「公开 / 私密」切换，而不是单独占一个顶级标签。
+class _BookmarkListView extends ConsumerStatefulWidget {
+  const _BookmarkListView({required this.userId});
+
+  final int userId;
+
+  @override
+  ConsumerState<_BookmarkListView> createState() => _BookmarkListViewState();
+}
+
+class _BookmarkListViewState extends ConsumerState<_BookmarkListView> {
+  Restrict _restrict = Restrict.public;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+        child: SegmentedButton<Restrict>(
+          segments: const [
+            ButtonSegment(
+              value: Restrict.public,
+              icon: Icon(Icons.public_outlined),
+              label: Text('公开收藏'),
+            ),
+            ButtonSegment(
+              value: Restrict.private,
+              icon: Icon(Icons.lock_outline),
+              label: Text('私密收藏'),
+            ),
+          ],
+          selected: {_restrict},
+          onSelectionChanged: (values) =>
+              setState(() => _restrict = values.single),
+        ),
+      ),
+      Expanded(
+        child: _BookmarkGrid(
+          key: ValueKey(_restrict),
+          userId: widget.userId,
+          restrict: _restrict,
+        ),
+      ),
+    ],
+  );
+}
+
 class _BookmarkGrid extends StatelessWidget {
-  const _BookmarkGrid({required this.userId, required this.restrict});
+  const _BookmarkGrid({
+    super.key,
+    required this.userId,
+    required this.restrict,
+  });
 
   final int userId;
   final Restrict restrict;

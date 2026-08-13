@@ -49,6 +49,9 @@ abstract class PixivService {
   Future<PageResponse<PixivUser>> nextUsers(String nextUrl) async =>
       parseUserPage(await client.getAbsolute(nextUrl));
 
+  Future<PageResponse<UserPreview>> nextUserPreviews(String nextUrl) async =>
+      parseUserPreviewPage(await client.getAbsolute(nextUrl));
+
   Future<PageResponse<Novel>> nextNovels(String nextUrl) async =>
       parseNovelPage(await client.getAbsolute(nextUrl));
 

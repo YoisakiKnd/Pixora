@@ -62,3 +62,7 @@ flutter run -d <设备 ID>
 ```bash
 flutter run -d windows
 ```
+
+## 开源协议
+
+本项目采用 [MIT License](./LICENSE)。

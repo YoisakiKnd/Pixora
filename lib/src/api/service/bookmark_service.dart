@@ -55,17 +55,20 @@ class BookmarkService extends PixivService {
     Restrict restrict = Restrict.public,
     String? tag,
     int? maxBookmarkId,
-  }) async => parseIllustPage(
-    await callGet(
-      Endpoints.userBookmarksIllust,
-      query: {
-        'user_id': userId,
-        'restrict': restrict.wire,
-        'tag': tag,
-        'max_bookmark_id': maxBookmarkId,
-      },
-    ),
-  );
+  }) async {
+    final page = parseIllustPage(
+      await callGet(
+        Endpoints.userBookmarksIllust,
+        query: {
+          'user_id': userId,
+          'restrict': restrict.wire,
+          'tag': tag,
+          'max_bookmark_id': maxBookmarkId,
+        },
+      ),
+    );
+    return _markPrivate(page, restrict);
+  }
 
   /// next_url 失效时的 offset 兜底。PixEz 为此专门写了
   /// `getBookmarksIllustsOffset`，是纯实战经验。
@@ -74,17 +77,32 @@ class BookmarkService extends PixivService {
     Restrict restrict = Restrict.public,
     String? tag,
     required int offset,
-  }) async => parseIllustPage(
-    await callGet(
-      Endpoints.userBookmarksIllust,
-      query: {
-        'user_id': userId,
-        'restrict': restrict.wire,
-        'tag': tag,
-        'offset': offset,
-      },
-    ),
-  );
+  }) async {
+    final page = parseIllustPage(
+      await callGet(
+        Endpoints.userBookmarksIllust,
+        query: {
+          'user_id': userId,
+          'restrict': restrict.wire,
+          'tag': tag,
+          'offset': offset,
+        },
+      ),
+    );
+    return _markPrivate(page, restrict);
+  }
+
+  /// 私密收藏列表里的作品需要标注「已私密收藏」，否则收藏按钮会把它们当成
+  /// 未收藏去重复收藏，无法再次点击取消。
+  PageResponse<Illust> _markPrivate(
+    PageResponse<Illust> page,
+    Restrict restrict,
+  ) {
+    if (restrict != Restrict.private) return page;
+    return page.map(
+      (illust) => illust.copyWithBookmark(isBookmarkedPrivate: true),
+    );
+  }
 
   /// 用户自建的收藏分类标签。
   Future<PageResponse<BookmarkTag>> illustTags(
