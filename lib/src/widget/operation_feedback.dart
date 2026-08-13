@@ -172,14 +172,10 @@ class OperationFeedbackHost extends StatefulWidget {
 }
 
 class _OperationFeedbackHostState extends State<OperationFeedbackHost> {
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
-  String? _presentedSignature;
-
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
   }
 
   @override
@@ -188,9 +184,7 @@ class _OperationFeedbackHostState extends State<OperationFeedbackHost> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_onControllerChanged);
       widget.controller.addListener(_onControllerChanged);
-      _presentedSignature = null;
     }
-    _scheduleSync();
   }
 
   @override
@@ -199,148 +193,157 @@ class _OperationFeedbackHostState extends State<OperationFeedbackHost> {
     super.dispose();
   }
 
-  void _onControllerChanged() => _scheduleSync();
-
-  void _scheduleSync() {
-    if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _sync();
-    });
-  }
-
-  void _sync() {
-    final notice = widget.controller.notice;
-    final signature = notice == null
-        ? null
-        : '${notice.key}:${notice.kind}:${notice.title}:'
-              '${notice.message}:${notice.actionLabel}';
-    if (signature == _presentedSignature) return;
-
-    _presentedSignature = signature;
-    final messenger = _messengerKey.currentState;
-    if (notice == null) {
-      messenger?.removeCurrentSnackBar();
-      return;
-    }
-
-    messenger
-      ?..removeCurrentSnackBar()
-      ..showSnackBar(_buildSnackBar(notice));
-  }
-
-  SnackBar _buildSnackBar(OperationFeedbackNotice notice) {
-    final theme = Theme.of(context);
-    final colors = switch (notice.kind) {
-      OperationFeedbackKind.pending || OperationFeedbackKind.info => (
-        background: theme.colorScheme.inverseSurface,
-        foreground: theme.colorScheme.onInverseSurface,
-        icon: theme.colorScheme.inversePrimary,
-      ),
-      OperationFeedbackKind.success => (
-        background: theme.colorScheme.primaryContainer,
-        foreground: theme.colorScheme.onPrimaryContainer,
-        icon: theme.colorScheme.primary,
-      ),
-      OperationFeedbackKind.error => (
-        background: theme.colorScheme.errorContainer,
-        foreground: theme.colorScheme.onErrorContainer,
-        icon: theme.colorScheme.error,
-      ),
-    };
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isNarrow = screenWidth < 480;
-    final actionLabel = notice.actionLabel;
-    final hasAction = actionLabel != null;
-
-    void dismissIfCurrent() {
-      if (identical(widget.controller.notice, notice)) {
-        widget.controller.dismiss(key: notice.key);
-      }
-    }
-
-    return SnackBar(
-      behavior: SnackBarBehavior.floating,
-      width: isNarrow ? null : 420,
-      margin: isNarrow ? const EdgeInsets.fromLTRB(12, 0, 12, 12) : null,
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-      backgroundColor: colors.background,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      duration: const Duration(days: 1),
-      content: Semantics(
-        liveRegion: true,
-        child: Row(
-          children: [
-            SizedBox.square(
-              dimension: 20,
-              child: notice.kind == OperationFeedbackKind.pending
-                  ? CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.icon,
-                    )
-                  : Icon(
-                      switch (notice.kind) {
-                        OperationFeedbackKind.success =>
-                          Icons.check_circle_outline,
-                        OperationFeedbackKind.error => Icons.error_outline,
-                        OperationFeedbackKind.info => Icons.info_outline,
-                        OperationFeedbackKind.pending => null,
-                      },
-                      size: 19,
-                      color: colors.icon,
-                    ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    notice.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.foreground,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (notice.message case final message?)
-                    Text(
-                      message,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.foreground,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (!hasAction && notice.kind != OperationFeedbackKind.pending)
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: '关闭',
-                onPressed: dismissIfCurrent,
-                icon: Icon(Icons.close, size: 18, color: colors.foreground),
-              ),
-          ],
-        ),
-      ),
-      action: actionLabel == null
-          ? null
-          : SnackBarAction(
-              label: actionLabel,
-              textColor: colors.icon,
-              onPressed: () {
-                notice.onAction?.call();
-                dismissIfCurrent();
-              },
-            ),
-    );
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
-  Widget build(BuildContext context) =>
-      ScaffoldMessenger(key: _messengerKey, child: widget.child);
+  Widget build(BuildContext context) {
+    final notice = widget.controller.notice;
+    return Stack(
+      children: [
+        widget.child,
+        if (notice != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 84 + MediaQuery.viewPaddingOf(context).bottom,
+            child: Center(
+              child: _Toast(controller: widget.controller, notice: notice),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 小的消息框（Toast 样式）：底部居中的深色圆角小胶囊，而不是整条消息条。
+///
+/// 只占用自身大小的区域，空处点击会穿透到下方页面；带操作按钮的提示
+/// 按钮仍然可点。
+class _Toast extends StatelessWidget {
+  const _Toast({required this.controller, required this.notice});
+
+  final OperationFeedbackController controller;
+  final OperationFeedbackNotice notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = notice.kind;
+    const background = Color(0xE6000000);
+    const foreground = Colors.white;
+    final accent = switch (kind) {
+      OperationFeedbackKind.success => const Color(0xFF8CE99A),
+      OperationFeedbackKind.error => const Color(0xFFFF8A80),
+      OperationFeedbackKind.pending ||
+      OperationFeedbackKind.info => Colors.white70,
+    };
+
+    void dismissIfCurrent() {
+      if (identical(controller.notice, notice)) {
+        controller.dismiss(key: notice.key);
+      }
+    }
+
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('${notice.key}:${notice.kind}:${notice.title}'),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 160),
+      builder: (context, opacity, child) =>
+          Opacity(opacity: opacity, child: child),
+      child: Semantics(
+        liveRegion: true,
+        child: Material(
+          color: background,
+          elevation: 3,
+          shadowColor: Colors.black45,
+          borderRadius: BorderRadius.circular(22),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (kind == OperationFeedbackKind.pending)
+                  const SizedBox.square(
+                    dimension: 15,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: foreground,
+                    ),
+                  )
+                else
+                  Icon(
+                    switch (kind) {
+                      OperationFeedbackKind.success =>
+                        Icons.check_circle_outline,
+                      OperationFeedbackKind.error => Icons.error_outline,
+                      OperationFeedbackKind.info => Icons.info_outline,
+                      OperationFeedbackKind.pending => Icons.info_outline,
+                    },
+                    size: 16,
+                    color: accent,
+                  ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          notice.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: foreground,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (notice.message case final message?)
+                          Text(
+                            message,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (notice.actionLabel case final label?) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      notice.onAction?.call();
+                      dismissIfCurrent();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

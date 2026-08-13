@@ -50,7 +50,7 @@ void main() {
     controller.dismiss();
   });
 
-  testWidgets('host renders feedback action and dismisses it', (tester) async {
+  testWidgets('host renders toast and dismisses it via action', (tester) async {
     final controller = OperationFeedbackController();
     addTearDown(controller.dispose);
     var actionCalled = false;
@@ -73,7 +73,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text('加载失败'), findsOneWidget);
     expect(find.text('请检查网络'), findsOneWidget);
     await tester.tap(find.text('重试'));

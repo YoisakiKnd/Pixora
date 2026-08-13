@@ -203,6 +203,16 @@ void main() {
       expect(manager.tasks.map((t) => t.page), isNot(contains(1)));
     });
 
+    test('下载完成时回调 onTaskCompleted', () async {
+      final manager = makeManager();
+      DownloadTask? completed;
+      manager.onTaskCompleted = (task) => completed = task;
+
+      await manager.enqueueIllust(singlePage(12));
+      await waitFor(() => completed != null, reason: '完成回调');
+      expect(completed!.status, DownloadStatus.done);
+    });
+
     test('同名文件已存在时保留旧文件并追加序号', () async {
       final manager = makeManager();
       final path = '${tempDir.path}${Platform.pathSeparator}5_p0.png';

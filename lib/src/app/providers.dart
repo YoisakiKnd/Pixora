@@ -102,6 +102,26 @@ final downloadManagerProvider = ChangeNotifierProvider<DownloadManager>((ref) {
   );
   // 恢复历史记录；完成后 notifyListeners 触发重建。
   unawaited(manager.restore());
+
+  // 下载完成时用短时 toast 提示；短时间内多页完成会合并成一条。
+  var pendingCount = 0;
+  Timer? flushTimer;
+  manager.onTaskCompleted = (task) {
+    pendingCount++;
+    flushTimer?.cancel();
+    flushTimer = Timer(const Duration(milliseconds: 500), () {
+      final count = pendingCount;
+      pendingCount = 0;
+      ref
+          .read(operationFeedbackProvider)
+          .success(
+            key: 'download-done',
+            title: '下载完成',
+            message: count > 1 ? '$count 张原图已保存' : '「${task.title}」已保存',
+          );
+    });
+  };
+  ref.onDispose(() => flushTimer?.cancel());
   return manager;
 });
 

@@ -69,6 +69,10 @@ class DownloadManager extends ChangeNotifier {
 
   final int maxConcurrent;
 
+  /// 单个任务下载完成时的回调，用于全局「下载完成」toast。
+  /// 在 [restore] 之前设置。
+  void Function(DownloadTask task)? onTaskCompleted;
+
   /// 插入序即 FIFO 调度序。
   final Map<String, DownloadTask> _tasks = {};
   final Map<String, CancelToken> _cancelTokens = {};
@@ -282,6 +286,7 @@ class DownloadManager extends ChangeNotifier {
       ..status = status
       ..completedAt = status == DownloadStatus.done ? DateTime.now() : null;
     unawaited(_repository.upsert(task));
+    if (status == DownloadStatus.done) onTaskCompleted?.call(task);
     notifyListeners();
   }
 
