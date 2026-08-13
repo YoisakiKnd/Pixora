@@ -228,6 +228,7 @@ class _ActivityTab extends ConsumerWidget {
               children: [
                 IllustGridView(
                   emptyHint: '关注的画师还没有新作品。可去发现页看看推荐',
+                  autoLoad: false,
                   createPaginator: (api) => Paginator<Illust>(
                     first: () => api.illust.followTimeline(),
                     byNextUrl: api.illust.nextIllusts,
@@ -235,7 +236,7 @@ class _ActivityTab extends ConsumerWidget {
                   ),
                 ),
                 _BookmarkListView(userId: userId),
-                FollowingListView(userId: userId),
+                FollowingListView(userId: userId, autoLoad: false),
               ],
             ),
           ),
@@ -255,41 +256,48 @@ class _BookmarkListView extends ConsumerStatefulWidget {
   ConsumerState<_BookmarkListView> createState() => _BookmarkListViewState();
 }
 
-class _BookmarkListViewState extends ConsumerState<_BookmarkListView> {
+class _BookmarkListViewState extends ConsumerState<_BookmarkListView>
+    with AutomaticKeepAliveClientMixin {
   Restrict _restrict = Restrict.public;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-        child: SegmentedButton<Restrict>(
-          segments: const [
-            ButtonSegment(
-              value: Restrict.public,
-              icon: Icon(Icons.public_outlined),
-              label: Text('公开收藏'),
-            ),
-            ButtonSegment(
-              value: Restrict.private,
-              icon: Icon(Icons.lock_outline),
-              label: Text('私密收藏'),
-            ),
-          ],
-          selected: {_restrict},
-          onSelectionChanged: (values) =>
-              setState(() => _restrict = values.single),
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+          child: SegmentedButton<Restrict>(
+            segments: const [
+              ButtonSegment(
+                value: Restrict.public,
+                icon: Icon(Icons.public_outlined),
+                label: Text('公开收藏'),
+              ),
+              ButtonSegment(
+                value: Restrict.private,
+                icon: Icon(Icons.lock_outline),
+                label: Text('私密收藏'),
+              ),
+            ],
+            selected: {_restrict},
+            onSelectionChanged: (values) =>
+                setState(() => _restrict = values.single),
+          ),
         ),
-      ),
-      Expanded(
-        child: _BookmarkGrid(
-          key: ValueKey(_restrict),
-          userId: widget.userId,
-          restrict: _restrict,
+        Expanded(
+          child: _BookmarkGrid(
+            key: ValueKey(_restrict),
+            userId: widget.userId,
+            restrict: _restrict,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _BookmarkGrid extends StatelessWidget {
@@ -307,6 +315,7 @@ class _BookmarkGrid extends StatelessWidget {
     emptyHint: restrict == Restrict.private
         ? '没有私密收藏。可在作品卡片或详情页收藏后切换为私密'
         : '还没有收藏。可在发现页点卡片左上角收藏按钮添加',
+    autoLoad: false,
     createPaginator: (api) => Paginator<Illust>(
       first: () => api.bookmark.illusts(userId, restrict: restrict),
       byNextUrl: api.illust.nextIllusts,

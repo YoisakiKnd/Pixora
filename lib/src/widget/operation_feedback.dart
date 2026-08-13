@@ -67,7 +67,7 @@ class OperationFeedbackController extends ChangeNotifier {
     String? message,
     String? actionLabel,
     VoidCallback? onAction,
-    Duration duration = const Duration(seconds: 2),
+    Duration duration = const Duration(milliseconds: 1500),
   }) => _showResult(
     OperationFeedbackNotice(
       key: key,
@@ -86,7 +86,7 @@ class OperationFeedbackController extends ChangeNotifier {
     String? message,
     String? actionLabel,
     VoidCallback? onAction,
-    Duration duration = const Duration(seconds: 5),
+    Duration duration = const Duration(seconds: 3),
   }) => _showResult(
     OperationFeedbackNotice(
       key: key,
@@ -105,7 +105,7 @@ class OperationFeedbackController extends ChangeNotifier {
     String? message,
     String? actionLabel,
     VoidCallback? onAction,
-    Duration duration = const Duration(seconds: 3),
+    Duration duration = const Duration(seconds: 2),
   }) => _showResult(
     OperationFeedbackNotice(
       key: key,
@@ -129,12 +129,17 @@ class OperationFeedbackController extends ChangeNotifier {
   }
 
   void _showResult(OperationFeedbackNotice notice, Duration duration) {
+    // 纯提示保持短时 toast；带操作按钮的提示给用户留下点击时间。
+    final effective =
+        notice.actionLabel != null && duration < const Duration(seconds: 4)
+        ? const Duration(seconds: 4)
+        : duration;
     final revision = ++_revision;
     _pendingTimer?.cancel();
     _dismissTimer?.cancel();
     _notice = notice;
     notifyListeners();
-    _dismissTimer = Timer(duration, () {
+    _dismissTimer = Timer(effective, () {
       if (revision != _revision || _notice?.key != notice.key) return;
       _notice = null;
       notifyListeners();

@@ -102,11 +102,12 @@ class DownloadManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 把作品的全部原图入队。返回实际新增的任务数。
+  /// 把作品的原图入队。返回实际新增的任务数。
   ///
+  /// 默认全部页；传入 [pages]（0 起页号）时只入队这些页，用于「分P下载」。
   /// 同一页已在队列中（排队 / 下载中 / 已完成）时跳过；failed / canceled
   /// 则重新入队 —— 用户重复点下载按钮的意图就是「把没下成的补上」。
-  Future<int> enqueueIllust(Illust illust) async {
+  Future<int> enqueueIllust(Illust illust, {Set<int>? pages}) async {
     final urls = illust.originalImageUrls;
     if (urls.isEmpty) return 0;
 
@@ -114,6 +115,7 @@ class DownloadManager extends ChangeNotifier {
     final location = await _storage.resolveLocation(preferences.location);
     var added = 0;
     for (var page = 0; page < urls.length; page++) {
+      if (pages != null && !pages.contains(page)) continue;
       final key = taskKey(illust.id, page);
       final existing = _tasks[key];
       if (existing != null && !existing.canRetry) continue;

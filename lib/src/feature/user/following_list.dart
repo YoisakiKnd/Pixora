@@ -32,50 +32,62 @@ class FollowingListView extends ConsumerStatefulWidget {
     super.key,
     required this.userId,
     this.initialRestrict = Restrict.public,
+    this.autoLoad = true,
   });
 
   final int userId;
   final Restrict initialRestrict;
 
+  /// 为 false 时不自动发起首屏请求，显示「刷新」按钮由用户手动加载。
+  final bool autoLoad;
+
   @override
   ConsumerState<FollowingListView> createState() => _FollowingListViewState();
 }
 
-class _FollowingListViewState extends ConsumerState<FollowingListView> {
+class _FollowingListViewState extends ConsumerState<FollowingListView>
+    with AutomaticKeepAliveClientMixin {
   late Restrict _restrict = widget.initialRestrict;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-        child: SegmentedButton<Restrict>(
-          segments: const [
-            ButtonSegment(
-              value: Restrict.public,
-              icon: Icon(Icons.group_outlined),
-              label: Text('公开关注'),
-            ),
-            ButtonSegment(
-              value: Restrict.private,
-              icon: Icon(Icons.lock_outline),
-              label: Text('私密关注'),
-            ),
-          ],
-          selected: {_restrict},
-          onSelectionChanged: (values) =>
-              setState(() => _restrict = values.single),
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+          child: SegmentedButton<Restrict>(
+            segments: const [
+              ButtonSegment(
+                value: Restrict.public,
+                icon: Icon(Icons.group_outlined),
+                label: Text('公开关注'),
+              ),
+              ButtonSegment(
+                value: Restrict.private,
+                icon: Icon(Icons.lock_outline),
+                label: Text('私密关注'),
+              ),
+            ],
+            selected: {_restrict},
+            onSelectionChanged: (values) =>
+                setState(() => _restrict = values.single),
+          ),
         ),
-      ),
-      Expanded(
-        child: _FollowingList(
-          key: ValueKey(_restrict),
-          userId: widget.userId,
-          restrict: _restrict,
+        Expanded(
+          child: _FollowingList(
+            key: ValueKey(_restrict),
+            userId: widget.userId,
+            restrict: _restrict,
+            autoLoad: widget.autoLoad,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _FollowingList extends ConsumerStatefulWidget {
@@ -83,20 +95,26 @@ class _FollowingList extends ConsumerStatefulWidget {
     super.key,
     required this.userId,
     required this.restrict,
+    this.autoLoad = true,
   });
 
   final int userId;
   final Restrict restrict;
+  final bool autoLoad;
 
   @override
   ConsumerState<_FollowingList> createState() => _FollowingListState();
 }
 
-class _FollowingListState extends ConsumerState<_FollowingList> {
+class _FollowingListState extends ConsumerState<_FollowingList>
+    with AutomaticKeepAliveClientMixin {
   late final Paginator<UserPreview> _paginator;
   final _scrollController = ScrollController();
   Object? _error;
   bool _initialLoading = true;
+
+  @override
+  bool get wantKeepAlive => !widget.autoLoad;
 
   @override
   void initState() {
@@ -114,7 +132,11 @@ class _FollowingListState extends ConsumerState<_FollowingList> {
       idOf: (preview) => preview.user.id,
     );
     _scrollController.addListener(_onScroll);
-    _load();
+    if (widget.autoLoad) {
+      _load();
+    } else {
+      _initialLoading = false;
+    }
   }
 
   @override
@@ -168,6 +190,7 @@ class _FollowingListState extends ConsumerState<_FollowingList> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_initialLoading) {
       return const ContentLoadingView(title: '正在加载关注列表', body: '正在读取画师资料…');
     }
@@ -181,6 +204,15 @@ class _FollowingListState extends ConsumerState<_FollowingList> {
         actionLabel: '重试',
         onAction: _load,
         tone: UserHintTone.warning,
+      );
+    }
+    if (!widget.autoLoad && !_paginator.hasStarted) {
+      return UserHint(
+        icon: Icons.refresh_outlined,
+        title: '切换标签不会自动加载内容',
+        body: '点击下方刷新按钮加载。',
+        actionLabel: '刷新',
+        onAction: _load,
       );
     }
     if (_paginator.isEmpty) {

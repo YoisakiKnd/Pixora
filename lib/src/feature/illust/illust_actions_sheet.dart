@@ -7,6 +7,7 @@ import '../../widget/operation_feedback.dart';
 import '../download/downloads_page.dart';
 import '../mute/mute_actions.dart';
 import 'bookmark_toggle.dart';
+import 'download_pages_sheet.dart';
 import 'illust_detail_page.dart';
 
 Future<void> showIllustActionsSheet(
@@ -118,6 +119,13 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
     );
   }
 
+  Future<void> _chooseDownloadPages() async {
+    final illust = _current;
+    if (!illust.isMultiPage || !mounted) return;
+    Navigator.of(context).pop();
+    await showDownloadPagesSheet(context, ref, illust);
+  }
+
   Future<void> _openMuteSheet() async {
     Navigator.of(context).pop();
     await showMuteSheet(context, ref, _current);
@@ -183,6 +191,9 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
                     label: '下载原图',
                     busy: _downloading,
                     onTap: _download,
+                    onLongPress: current.isMultiPage
+                        ? _chooseDownloadPages
+                        : null,
                   ),
                 ),
                 const SizedBox(width: 10),

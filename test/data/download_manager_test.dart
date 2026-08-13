@@ -191,6 +191,18 @@ void main() {
       expect(await manager.enqueueIllust(bare), 0);
     });
 
+    test('指定分页时只入队选中页', () async {
+      final manager = makeManager();
+      expect(await manager.enqueueIllust(multiPage(11, 3), pages: {0, 2}), 2);
+      await waitFor(
+        () => manager.tasks.every((t) => t.status == DownloadStatus.done),
+        reason: '选中页完成',
+      );
+      expect(manager.tasks, hasLength(2));
+      expect(manager.tasks.map((t) => t.page), containsAll([0, 2]));
+      expect(manager.tasks.map((t) => t.page), isNot(contains(1)));
+    });
+
     test('同名文件已存在时保留旧文件并追加序号', () async {
       final manager = makeManager();
       final path = '${tempDir.path}${Platform.pathSeparator}5_p0.png';

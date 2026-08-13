@@ -15,7 +15,9 @@ import '../search/search_page.dart';
 import '../user/follow_button.dart';
 import '../user/user_page.dart';
 import 'bookmark_toggle.dart';
+import 'download_pages_sheet.dart';
 import 'illust_grid.dart';
+import 'illust_image_viewer.dart';
 import 'ugoira_player.dart';
 
 enum _IllustMoreAction { share, copyLink, openBrowser }
@@ -247,6 +249,16 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
     }
   }
 
+  void _openViewer(int page) {
+    final illust = _illust;
+    if (illust == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => IllustImageViewer(illust: illust, initialPage: page),
+      ),
+    );
+  }
+
   void _handleMoreAction(_IllustMoreAction action) {
     switch (action) {
       case _IllustMoreAction.share:
@@ -345,15 +357,18 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
                   illust: illust,
                 )
               else
-                for (final image in pageImages)
+                for (var index = 0; index < pageImages.length; index++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ProgressivePixivImage(
-                        previewUrl: image.preview,
-                        originalUrl: image.original,
-                        aspectRatio: illust.aspectRatio,
+                    child: GestureDetector(
+                      onTap: () => _openViewer(index),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ProgressivePixivImage(
+                          previewUrl: pageImages[index].preview,
+                          originalUrl: pageImages[index].original,
+                          aspectRatio: illust.aspectRatio,
+                        ),
                       ),
                     ),
                   ),
@@ -492,15 +507,23 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
         child: Row(
           children: [
             Expanded(
-              child: FilledButton.icon(
-                onPressed: _preparingDownload ? null : _download,
-                icon: _preparingDownload
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.download_outlined),
-                label: const Text('下载原图'),
+              child: Tooltip(
+                message: illust.isMultiPage ? '点击下载全部，长按选择分P下载' : '下载原图',
+                child: GestureDetector(
+                  onLongPress: illust.isMultiPage && !_preparingDownload
+                      ? () => showDownloadPagesSheet(context, ref, illust)
+                      : null,
+                  child: FilledButton.icon(
+                    onPressed: _preparingDownload ? null : _download,
+                    icon: _preparingDownload
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download_outlined),
+                    label: const Text('下载原图'),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),

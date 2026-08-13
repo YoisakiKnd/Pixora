@@ -20,6 +20,7 @@ class IllustGridView extends ConsumerStatefulWidget {
     this.dimWhen,
     this.dimLabel,
     this.appendBookmarkedToEnd = false,
+    this.autoLoad = true,
   });
 
   final Paginator<Illust> Function(PixivApi api) createPaginator;
@@ -28,13 +29,18 @@ class IllustGridView extends ConsumerStatefulWidget {
   final String Function(Illust illust)? dimLabel;
   final bool appendBookmarkedToEnd;
 
+  /// 为 false 时不自动发起首屏请求，显示「刷新」按钮由用户手动加载。
+  /// 用于动态页的标签切换场景，避免每次切换都重新请求。
+  final bool autoLoad;
+
   static const filteredMaskAsset = 'assets/illust_mask.webp';
 
   @override
   ConsumerState<IllustGridView> createState() => _IllustGridViewState();
 }
 
-class _IllustGridViewState extends ConsumerState<IllustGridView> {
+class _IllustGridViewState extends ConsumerState<IllustGridView>
+    with AutomaticKeepAliveClientMixin {
   late final Paginator<Illust> _paginator;
   final _scrollController = ScrollController();
   final List<Illust> _appendedBookmarks = [];
@@ -42,11 +48,18 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
   bool _initialLoading = true;
 
   @override
+  bool get wantKeepAlive => !widget.autoLoad;
+
+  @override
   void initState() {
     super.initState();
     _paginator = widget.createPaginator(ref.read(pixivApiProvider));
     _scrollController.addListener(_onScroll);
-    _load();
+    if (widget.autoLoad) {
+      _load();
+    } else {
+      _initialLoading = false;
+    }
   }
 
   @override
@@ -120,11 +133,20 @@ class _IllustGridViewState extends ConsumerState<IllustGridView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_initialLoading) {
       return const ContentLoadingView(title: '正在加载作品', body: '正在连接 Pixiv，请稍候…');
     }
     if (_error != null && _paginator.isEmpty) {
       return _ErrorView(error: _error!, onRetry: _load);
+    }
+    if (!widget.autoLoad && !_paginator.hasStarted) {
+      return _CenteredHint(
+        icon: Icons.refresh_outlined,
+        text: '切换标签不会自动加载内容',
+        actionLabel: '刷新',
+        onRetry: _load,
+      );
     }
     if (_paginator.isEmpty) {
       return _CenteredHint(
@@ -523,16 +545,18 @@ class _CenteredHint extends StatelessWidget {
     required this.icon,
     required this.text,
     required this.onRetry,
+    this.actionLabel = '重试',
   });
   final IconData icon;
   final String text;
   final VoidCallback onRetry;
+  final String actionLabel;
   @override
   Widget build(BuildContext context) => UserHint(
     icon: icon,
     title: text,
     body: '下拉或点重试可重新加载。若持续失败，请检查系统代理 / VPN。',
-    actionLabel: '重试',
+    actionLabel: actionLabel,
     onAction: onRetry,
   );
 }
