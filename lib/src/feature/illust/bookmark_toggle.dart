@@ -148,7 +148,12 @@ class _BookmarkButtonState extends ConsumerState<BookmarkButton> {
 
   @override
   Widget build(BuildContext context) {
-    final notifier = ref.read(objectPoolProvider).illusts.track(widget.illust);
+    final pool = ref.read(objectPoolProvider).illusts;
+    // 不能直接 track：track 会 put 合并出新对象并触发通知，而本按钮又嵌套在
+    // 卡片的 ValueListenableBuilder 里，会形成「put → 通知 → 重建 → track → …」
+    // 的无限循环。已有条目直接复用监听器，仅在池里缺失时才写入一次。
+    final notifier =
+        pool.listenable(widget.illust.id) ?? pool.track(widget.illust);
     return ValueListenableBuilder<Illust>(
       valueListenable: notifier,
       builder: (context, illust, _) {
