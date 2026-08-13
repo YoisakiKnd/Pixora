@@ -61,13 +61,14 @@ class OperationFeedbackController extends ChangeNotifier {
     }
   }
 
+  /// 成功提示。默认时长对齐 Android Toast 的 LENGTH_SHORT（2 秒）。
   void success({
     required String key,
     required String title,
     String? message,
     String? actionLabel,
     VoidCallback? onAction,
-    Duration duration = const Duration(milliseconds: 1500),
+    Duration duration = const Duration(seconds: 2),
   }) => _showResult(
     OperationFeedbackNotice(
       key: key,
@@ -80,13 +81,14 @@ class OperationFeedbackController extends ChangeNotifier {
     duration,
   );
 
+  /// 错误提示。默认时长对齐 Android Toast 的 LENGTH_LONG（3.5 秒）。
   void error({
     required String key,
     required String title,
     String? message,
     String? actionLabel,
     VoidCallback? onAction,
-    Duration duration = const Duration(seconds: 3),
+    Duration duration = const Duration(milliseconds: 3500),
   }) => _showResult(
     OperationFeedbackNotice(
       key: key,
@@ -219,8 +221,8 @@ class _OperationFeedbackHostState extends State<OperationFeedbackHost> {
 
 /// 小的消息框（Toast 样式）：底部居中的深色圆角小胶囊，而不是整条消息条。
 ///
-/// 只占用自身大小的区域，空处点击会穿透到下方页面；带操作按钮的提示
-/// 按钮仍然可点。
+/// 对照 Android Toast：应用图标 + 简洁文字（最多两行），只占内容所需空间，
+/// 空处点击会穿透到下方页面；带操作按钮的提示按钮仍然可点。
 class _Toast extends StatelessWidget {
   const _Toast({required this.controller, required this.notice});
 
@@ -230,14 +232,9 @@ class _Toast extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = notice.kind;
-    const background = Color(0xE6000000);
-    const foreground = Colors.white;
-    final accent = switch (kind) {
-      OperationFeedbackKind.success => const Color(0xFF8CE99A),
-      OperationFeedbackKind.error => const Color(0xFFFF8A80),
-      OperationFeedbackKind.pending ||
-      OperationFeedbackKind.info => Colors.white70,
-    };
+    final text = notice.message == null
+        ? notice.title
+        : '${notice.title}：${notice.message}';
 
     void dismissIfCurrent() {
       if (identical(controller.notice, notice)) {
@@ -254,12 +251,12 @@ class _Toast extends StatelessWidget {
       child: Semantics(
         liveRegion: true,
         child: Material(
-          color: background,
+          color: const Color(0xE63C4043),
           elevation: 3,
-          shadowColor: Colors.black45,
-          borderRadius: BorderRadius.circular(22),
+          shadowColor: Colors.black38,
+          borderRadius: BorderRadius.circular(24),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -268,55 +265,35 @@ class _Toast extends StatelessWidget {
                     dimension: 15,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: foreground,
+                      color: Colors.white,
                     ),
                   )
                 else
-                  Icon(
-                    switch (kind) {
-                      OperationFeedbackKind.success =>
-                        Icons.check_circle_outline,
-                      OperationFeedbackKind.error => Icons.error_outline,
-                      OperationFeedbackKind.info => Icons.info_outline,
-                      OperationFeedbackKind.pending => Icons.info_outline,
-                    },
-                    size: 16,
-                    color: accent,
+                  Image.asset(
+                    'assets/app_icon.png',
+                    width: 16,
+                    height: 16,
+                    errorBuilder: (_, _, _) =>
+                        const SizedBox.square(dimension: 16),
                   ),
                 const SizedBox(width: 8),
                 Flexible(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 320),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          notice.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: foreground,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (notice.message case final message?)
-                          Text(
-                            message,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                      ],
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
                     ),
                   ),
                 ),
                 if (notice.actionLabel case final label?) ...[
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: () {
@@ -330,8 +307,8 @@ class _Toast extends StatelessWidget {
                       ),
                       child: Text(
                         label,
-                        style: TextStyle(
-                          color: accent,
+                        style: const TextStyle(
+                          color: Color(0xFF8AB4F8),
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),

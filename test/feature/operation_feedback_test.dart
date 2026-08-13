@@ -73,8 +73,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('加载失败'), findsOneWidget);
-    expect(find.text('请检查网络'), findsOneWidget);
+    expect(find.text('加载失败：请检查网络'), findsOneWidget);
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
 
