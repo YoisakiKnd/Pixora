@@ -32,14 +32,15 @@ class FollowingListView extends ConsumerStatefulWidget {
     super.key,
     required this.userId,
     this.initialRestrict = Restrict.public,
-    this.autoLoad = true,
+    this.keepAlive = false,
   });
 
   final int userId;
   final Restrict initialRestrict;
 
-  /// 为 false 时不自动发起首屏请求，显示「刷新」按钮由用户手动加载。
-  final bool autoLoad;
+  /// 在 TabBarView 等会销毁离屏子页的容器里保持状态：切换标签时保留已加载
+  /// 内容，不重新请求；用户可用下拉刷新手动更新。
+  final bool keepAlive;
 
   @override
   ConsumerState<FollowingListView> createState() => _FollowingListViewState();
@@ -82,7 +83,7 @@ class _FollowingListViewState extends ConsumerState<FollowingListView>
             key: ValueKey(_restrict),
             userId: widget.userId,
             restrict: _restrict,
-            autoLoad: widget.autoLoad,
+            keepAlive: widget.keepAlive,
           ),
         ),
       ],
@@ -95,12 +96,12 @@ class _FollowingList extends ConsumerStatefulWidget {
     super.key,
     required this.userId,
     required this.restrict,
-    this.autoLoad = true,
+    this.keepAlive = false,
   });
 
   final int userId;
   final Restrict restrict;
-  final bool autoLoad;
+  final bool keepAlive;
 
   @override
   ConsumerState<_FollowingList> createState() => _FollowingListState();
@@ -114,7 +115,7 @@ class _FollowingListState extends ConsumerState<_FollowingList>
   bool _initialLoading = true;
 
   @override
-  bool get wantKeepAlive => !widget.autoLoad;
+  bool get wantKeepAlive => widget.keepAlive;
 
   @override
   void initState() {
@@ -132,11 +133,7 @@ class _FollowingListState extends ConsumerState<_FollowingList>
       idOf: (preview) => preview.user.id,
     );
     _scrollController.addListener(_onScroll);
-    if (widget.autoLoad) {
-      _load();
-    } else {
-      _initialLoading = false;
-    }
+    _load();
   }
 
   @override
@@ -204,15 +201,6 @@ class _FollowingListState extends ConsumerState<_FollowingList>
         actionLabel: '重试',
         onAction: _load,
         tone: UserHintTone.warning,
-      );
-    }
-    if (!widget.autoLoad && !_paginator.hasStarted) {
-      return UserHint(
-        icon: Icons.refresh_outlined,
-        title: '切换标签不会自动加载内容',
-        body: '点击下方刷新按钮加载。',
-        actionLabel: '刷新',
-        onAction: _load,
       );
     }
     if (_paginator.isEmpty) {

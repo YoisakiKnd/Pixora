@@ -228,7 +228,7 @@ class _ActivityTab extends ConsumerWidget {
               children: [
                 IllustGridView(
                   emptyHint: '关注的画师还没有新作品。可去发现页看看推荐',
-                  autoLoad: false,
+                  keepAlive: true,
                   createPaginator: (api) => Paginator<Illust>(
                     first: () => api.illust.followTimeline(),
                     byNextUrl: api.illust.nextIllusts,
@@ -236,7 +236,7 @@ class _ActivityTab extends ConsumerWidget {
                   ),
                 ),
                 _BookmarkListView(userId: userId),
-                FollowingListView(userId: userId, autoLoad: false),
+                FollowingListView(userId: userId, keepAlive: true),
               ],
             ),
           ),
@@ -315,7 +315,7 @@ class _BookmarkGrid extends StatelessWidget {
     emptyHint: restrict == Restrict.private
         ? '没有私密收藏。可在作品卡片或详情页收藏后切换为私密'
         : '还没有收藏。可在发现页点卡片左上角收藏按钮添加',
-    autoLoad: false,
+    keepAlive: true,
     createPaginator: (api) => Paginator<Illust>(
       first: () => api.bookmark.illusts(userId, restrict: restrict),
       byNextUrl: api.illust.nextIllusts,
