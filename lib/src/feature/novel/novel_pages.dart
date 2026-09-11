@@ -246,8 +246,43 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
               body,
               style: TextStyle(fontSize: _fontSize, height: 1.8),
             ),
+          // 系列导航：正文之后给「上一话 / 下一话」。
+          if (_text case final text?
+              when text.prev != null || text.next != null) ...[
+            const Divider(height: 40),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: text.prev == null || !text.prev!.viewable
+                        ? null
+                        : () => _openNovel(text.prev!.id),
+                    icon: const Icon(Icons.chevron_left, size: 18),
+                    label: const Text('上一话'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: text.next == null || !text.next!.viewable
+                        ? null
+                        : () => _openNovel(text.next!.id),
+                    icon: const Icon(Icons.chevron_right, size: 18),
+                    label: const Text('下一话'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  /// 跳到系列里的另一话。用 pushReplacement 避免在栈里堆积阅读页。
+  void _openNovel(int novelId) {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => NovelReaderPage(novelId: novelId)),
     );
   }
 

@@ -5,6 +5,7 @@ import '../model/common/page_response.dart';
 import '../model/illust/comment.dart';
 import '../model/json_coercion.dart';
 import '../model/novel/novel.dart';
+import '../model/novel/novel_text.dart';
 import '../pixiv_exception.dart';
 import 'pixiv_service.dart';
 
@@ -24,14 +25,16 @@ class NovelService extends PixivService {
 
   /// 小说正文。
   ///
-  /// 走新版 `/webview/v2/novel`（老的 `/v1/novel/text` 已逐步废弃）。该端点
-  /// 返回的是一段 HTML，正文 JSON 内嵌在其中的 `novel:` 变量里，需要抽取。
+  /// 走 `/webview/v2/novel`（老的 `/v1/novel/text` 已废弃）。**该端点返回
+  /// 整页 HTML**，正文与系列导航内嵌在 `window.pixiv.value.novel` 里 ——
+  /// 必须用 [PixivApiClient.getRawText] 而不是 `callGet`，后者会因「响应不是
+  /// JSON 对象」直接抛异常（真机验证时发现的 bug）。
   Future<NovelText> text(int novelId) async {
-    final json = await callGet(
-      Endpoints.novelWebview,
+    final html = await client.getRawText(
+      Endpoints.novelWebview.path,
       query: {'id': novelId, 'raw': '1'},
     );
-    return NovelText.fromJson(json);
+    return NovelText.fromHtml(html);
   }
 
   Future<PageResponse<Novel>> recommended({int? offset}) async =>

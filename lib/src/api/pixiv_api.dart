@@ -25,6 +25,7 @@ export 'model/illust/illust.dart';
 export 'model/illust/illust_series_detail.dart';
 export 'model/illust/ugoira.dart';
 export 'model/novel/novel.dart';
+export 'model/novel/novel_text.dart';
 export 'model/user/pixiv_user.dart';
 export 'model/user/user_detail.dart';
 export 'paging/paginator.dart';

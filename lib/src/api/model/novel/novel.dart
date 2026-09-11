@@ -122,18 +122,3 @@ class Novel {
     novelAiType: novelAiType,
   );
 }
-
-/// `/webview/v2/novel` 返回的正文。
-class NovelText {
-  const NovelText({required this.text, this.seriesPrev, this.seriesNext});
-
-  final String text;
-  final Map<String, dynamic>? seriesPrev;
-  final Map<String, dynamic>? seriesNext;
-
-  factory NovelText.fromJson(Map<String, dynamic> json) => NovelText(
-    text: asString(json['text'] ?? json['novel_text']),
-    seriesPrev: asMap(json['series_prev']),
-    seriesNext: asMap(json['series_next']),
-  );
-}

@@ -340,12 +340,18 @@ void main() {
       expect(t.request.path, '/v2/novel/detail');
     });
 
-    test('正文走 webview v2', () async {
-      t.adapter.responder = (_) => {'text': '正文'};
+    test('正文走 webview v2 并解析 HTML 内嵌 JSON', () async {
+      // 真实响应是整页 HTML，正文在 window.pixiv.value.novel 里。
+      t.adapter.rawResponder = (_) =>
+          '<script>Object.defineProperty(window, \'pixiv\', {'
+          'value: {novel: {"text":"正文内容",'
+          '"seriesNavigation":{"nextNovel":{"id":2,"title":"下一话",'
+          '"viewable":true}}}});</script>';
       final text = await t.api.novel.text(1);
       expect(t.request.path, '/webview/v2/novel');
       expect(t.request.query['id'], '1');
-      expect(text.text, '正文');
+      expect(text.text, '正文内容');
+      expect(text.next!.id, 2);
     });
 
     test('series 用 last_order 游标', () async {

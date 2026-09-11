@@ -66,6 +66,9 @@ class RecordingAdapter implements HttpClientAdapter {
   /// 按请求返回响应体。默认返回空对象。
   Object? Function(RequestOptions options)? responder;
 
+  /// 返回**原始文本**（HTML 等非 JSON 响应）。设置后优先于 [responder]。
+  String? Function(RequestOptions options)? rawResponder;
+
   /// 按请求决定状态码。用于模拟「先 400 再 200」这类刷新重放场景。
   int Function(RequestOptions options)? statusFor;
 
@@ -103,6 +106,20 @@ class RecordingAdapter implements HttpClientAdapter {
 
     // 先算状态码再算 body：两者常常依赖同一个计数器，固定这个顺序才好写用例。
     final status = statusFor?.call(options) ?? statusCode;
+
+    // 有些端点（/webview/v2/novel）返回 HTML 而不是 JSON。
+    // rawResponder 优先，用于这类端点的契约测试。
+    final raw = rawResponder?.call(options);
+    if (raw != null) {
+      return ResponseBody.fromString(
+        raw,
+        status,
+        headers: {
+          Headers.contentTypeHeader: [Headers.textPlainContentType],
+        },
+      );
+    }
+
     final payload = responder?.call(options) ?? <String, dynamic>{};
     return ResponseBody.fromString(
       jsonEncode(payload),

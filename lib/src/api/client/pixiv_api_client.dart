@@ -54,6 +54,33 @@ class PixivApiClient {
     );
   }
 
+  /// 请求一个**返回 HTML 而非 JSON** 的端点，拿到原始字符串。
+
+  /// 存在的理由：`/webview/v2/novel` 返回整页 HTML（正文与系列导航内嵌在
+  /// `window.pixiv.value.novel` 里）。走 [get] 会被 `_request` 的
+  /// 「必须是 JSON 对象」检查拦下，抛 `PixivParseException`。
+  Future<String> getRawText(
+    String path, {
+    Map<String, dynamic>? query,
+    CancelToken? cancelToken,
+  }) async {
+    final cleaned = dropNulls(query);
+    final Response<String> response;
+    try {
+      response = await dio.get<String>(
+        path,
+        queryParameters: cleaned,
+        cancelToken: cancelToken,
+        options: Options(responseType: ResponseType.plain),
+      );
+    } on DioException catch (e) {
+      final inner = e.error;
+      if (inner is PixivException) throw inner;
+      throw toPixivException(e);
+    }
+    return response.data ?? '';
+  }
+
   /// 翻页：直接请求响应里给的完整 `next_url`。
   ///
   /// 不要自己拼 offset —— 收藏列表的游标是 `max_bookmark_id`、小说系列是
