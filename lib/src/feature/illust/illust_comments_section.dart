@@ -348,7 +348,8 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
   }
 }
 
-class _CommentTile extends StatelessWidget {
+/// 单条评论。带 `hasReplies` 时提供「查看 N 条回复」入口，展开后拉取楼中楼。
+class _CommentTile extends ConsumerStatefulWidget {
   const _CommentTile({
     required this.comment,
     required this.canDelete,
@@ -362,91 +363,179 @@ class _CommentTile extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
+  ConsumerState<_CommentTile> createState() => _CommentTileState();
+}
+
+class _CommentTileState extends ConsumerState<_CommentTile> {
+  List<PixivComment>? _replies;
+  bool _loadingReplies = false;
+  bool _expanded = false;
+
+  PixivComment get comment => widget.comment;
+
+  /// 展开 / 收起楼中楼。首次展开才请求，之后复用已加载结果。
+  Future<void> _toggleReplies() async {
+    if (_expanded) {
+      setState(() => _expanded = false);
+      return;
+    }
+    setState(() => _expanded = true);
+    if (_replies != null) return;
+
+    setState(() => _loadingReplies = true);
+    try {
+      final page = await ref
+          .read(pixivApiProvider)
+          .illust
+          .commentReplies(comment.id);
+      if (!mounted) return;
+      setState(() => _replies = page.items);
+    } catch (_) {
+      // 楼中楼加载失败不该影响主评论列表，收起并静默。
+      if (mounted) {
+        setState(() {
+          _expanded = false;
+          _replies = const [];
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loadingReplies = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final replies = _replies;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipOval(
-            child: PixivImage(
-              url: comment.user.profileImageUrls.best,
-              width: 34,
-              height: 34,
-              placeholderWidget: const Icon(Icons.person, size: 18),
-              errorWidget: const Icon(Icons.person, size: 18),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        comment.user.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (comment.date != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        _relativeDate(comment.date!),
-                        style: theme.textTheme.labelSmall,
-                      ),
-                    ],
-                  ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipOval(
+                child: PixivImage(
+                  url: comment.user.profileImageUrls.best,
+                  width: 34,
+                  height: 34,
+                  placeholderWidget: const Icon(Icons.person, size: 18),
+                  errorWidget: const Icon(Icons.person, size: 18),
                 ),
-                const SizedBox(height: 2),
-                if (comment.isStamp)
-                  PixivImage(
-                    url: comment.stampUrl,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.contain,
-                  )
-                else
-                  Text(comment.comment, style: theme.textTheme.bodyMedium),
-                Row(
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextButton(
-                      onPressed: onReply,
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                      ),
-                      child: const Text('回复', style: TextStyle(fontSize: 12)),
-                    ),
-                    if (canDelete)
-                      TextButton(
-                        onPressed: onDelete,
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.only(left: 12),
-                        ),
-                        child: Text(
-                          '删除',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.error,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            comment.user.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
+                        if (comment.date != null) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            _relativeDate(comment.date!),
+                            style: theme.textTheme.labelSmall,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    if (comment.isStamp)
+                      PixivImage(
+                        url: comment.stampUrl,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.contain,
+                      )
+                    else
+                      Text(comment.comment, style: theme.textTheme.bodyMedium),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: widget.onReply,
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: const Text(
+                            '回复',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        if (comment.hasReplies)
+                          TextButton(
+                            onPressed: _loadingReplies ? null : _toggleReplies,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.only(left: 12),
+                            ),
+                            child: Text(
+                              _replyLabel(replies),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        if (widget.canDelete)
+                          TextButton(
+                            onPressed: widget.onDelete,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.only(left: 12),
+                            ),
+                            child: Text(
+                              '删除',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          // 楼中楼：缩进 + 左侧竖线，视觉上从属于父评论。
+          if (_expanded) ...[
+            if (_loadingReplies)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(44, 4, 0, 4),
+                child: SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              for (final reply in replies ?? const <PixivComment>[])
+                _ReplyTile(
+                  key: ValueKey(reply.id),
+                  reply: reply,
+                  canDelete: widget.canDelete,
+                  onDelete: widget.onDelete,
+                ),
+          ],
         ],
       ),
     );
+  }
+
+  /// 回复按钮文案。未加载时不显示数量，避免先显示 (0) 再跳变。
+  String _replyLabel(List<PixivComment>? replies) {
+    if (_expanded) return '收起回复';
+    if (replies == null || replies.isEmpty) return '查看回复';
+    return '查看回复 (${replies.length})';
   }
 
   /// 相对时间，避免为了格式化引入 intl。
@@ -457,5 +546,92 @@ class _CommentTile extends StatelessWidget {
     if (diff.inDays < 1) return '${diff.inHours} 小时前';
     if (diff.inDays < 30) return '${diff.inDays} 天前';
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+/// 楼中楼里的一条回复。比顶层评论更紧凑，带左侧竖线表示从属关系。
+class _ReplyTile extends StatelessWidget {
+  const _ReplyTile({
+    super.key,
+    required this.reply,
+    required this.canDelete,
+    required this.onDelete,
+  });
+
+  final PixivComment reply;
+  final bool canDelete;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(44, 4, 0, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 2,
+            height: 32,
+            margin: const EdgeInsets.only(right: 8, top: 2),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.outlineVariant,
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+          ClipOval(
+            child: PixivImage(
+              url: reply.user.profileImageUrls.best,
+              width: 24,
+              height: 24,
+              placeholderWidget: const Icon(Icons.person, size: 13),
+              errorWidget: const Icon(Icons.person, size: 13),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reply.user.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (reply.isStamp)
+                  PixivImage(
+                    url: reply.stampUrl,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.contain,
+                  )
+                else
+                  Text(reply.comment, style: theme.textTheme.bodySmall),
+                if (canDelete)
+                  TextButton(
+                    onPressed: onDelete,
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      '删除',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

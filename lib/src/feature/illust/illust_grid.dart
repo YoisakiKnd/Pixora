@@ -6,6 +6,7 @@ import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../data/settings/settings_controller.dart';
 import '../../widget/operation_feedback.dart';
+import '../../widget/pixora_colors.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import 'bookmark_toggle.dart';
@@ -422,11 +423,12 @@ class _IllustCardBodyState extends ConsumerState<_IllustCardBody> {
                   children: [
                     if (widget.dimmed)
                       _LabelBadge(widget.dimLabel ?? '未达收藏门槛', Colors.black87),
-                    if (current.isR18) const _LabelBadge('R18', Colors.red),
+                    if (current.isR18)
+                      const _LabelBadge('R18', PixoraColors.r18),
                     if (current.isR18G)
-                      const _LabelBadge('R18G', Color(0xFF8E24AA)),
+                      const _LabelBadge('R18G', PixoraColors.r18g),
                     if (current.isAiGenerated)
-                      const _LabelBadge('AI', Color(0xFF3949AB)),
+                      const _LabelBadge('AI', PixoraColors.ai),
                     if (current.isMultiPage)
                       _LabelBadge('${current.pageCount}P', Colors.black54),
                     if (current.isUgoira)

@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
+import '../../widget/pixora_colors.dart';
 import '../../platform/url_launcher_browser.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
@@ -460,10 +461,11 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
                       runSpacing: 6,
                       children: [
                         if (illust.isAiGenerated)
-                          const _DetailLabel('AI 生成', Color(0xFF3949AB)),
-                        if (illust.isR18) const _DetailLabel('R18', Colors.red),
+                          const _DetailLabel('AI 生成', PixoraColors.ai),
+                        if (illust.isR18)
+                          const _DetailLabel('R18', PixoraColors.r18),
                         if (illust.isR18G)
-                          const _DetailLabel('R18G', Color(0xFF8E24AA)),
+                          const _DetailLabel('R18G', PixoraColors.r18g),
                         for (final tag in illust.tags)
                           Material(
                             color: theme.colorScheme.secondaryContainer,

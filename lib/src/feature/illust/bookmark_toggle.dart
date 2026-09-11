@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../data/pool/object_pool.dart';
+import '../../widget/pixora_colors.dart';
 
 /// 统一的收藏 / 取消收藏逻辑。
 ///
@@ -182,9 +183,9 @@ class _BookmarkButtonState extends ConsumerState<BookmarkButton> {
         final isPrivate = illust.isBookmarkedPrivate;
         final isBookmarked = illust.isBookmarked || isPrivate;
         final color = isPrivate
-            ? const Color(0xFFB388FF)
+            ? PixoraColors.bookmarkPrivate
             : isBookmarked
-            ? const Color(0xFFFF4D6D)
+            ? PixoraColors.bookmark
             : widget.variant == BookmarkButtonVariant.overlay
             ? Colors.white
             : null;

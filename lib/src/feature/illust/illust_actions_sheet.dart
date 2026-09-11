@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
+import '../../widget/pixora_colors.dart';
 import '../../widget/operation_feedback.dart';
 import '../mute/mute_actions.dart';
 import 'bookmark_toggle.dart';
@@ -172,9 +173,9 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
                         ? '取消收藏'
                         : '收藏',
                     color: isPrivateBookmarked
-                        ? const Color(0xFFB388FF)
+                        ? PixoraColors.bookmarkPrivate
                         : isBookmarked
-                        ? const Color(0xFFFF4060)
+                        ? PixoraColors.bookmark
                         : theme.colorScheme.primary,
                     busy: _bookmarking,
                     onTap: () => _toggleBookmark(private: false),
