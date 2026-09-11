@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../data/db/app_database.dart';
 
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
-import '../illust/illust_detail_page.dart';
 import '../illust/illust_grid.dart';
 import '../user/user_page.dart';
 import 'pixiv_search_input.dart';
@@ -417,9 +417,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     switch (PixivSearchInput.resolve(trimmed, searchKind)) {
       case IllustIdSearchIntent(:final id):
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => IllustDetailPage(illustId: id)),
-        );
+        await AppNavigator.openIllust(context, id);
       case UserIdSearchIntent(:final id):
         await Navigator.of(
           context,

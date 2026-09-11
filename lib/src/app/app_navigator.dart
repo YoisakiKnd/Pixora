@@ -4,8 +4,10 @@ import '../feature/auth/login_page.dart';
 import '../feature/download/downloads_page.dart';
 import '../feature/history/browse_history_page.dart';
 import '../feature/illust/illust_detail_page.dart';
+import '../feature/mute/mute_settings_page.dart';
 import '../feature/notice/notifications_page.dart';
 import '../feature/novel/novel_pages.dart';
+import '../feature/settings/ranking_preferences_page.dart';
 import '../feature/profile/personal_hub_page.dart';
 import '../feature/search/search_page.dart';
 import '../feature/settings/diagnostics_page.dart';
@@ -91,4 +93,10 @@ class AppNavigator {
 
   static Future<void> openNovelList(BuildContext context) =>
       push(context, const NovelListPage());
+
+  static Future<void> openRankingPreferences(BuildContext context) =>
+      push(context, const RankingPreferencesPage());
+
+  static Future<void> openMuteSettings(BuildContext context) =>
+      push(context, const MuteSettingsPage());
 }

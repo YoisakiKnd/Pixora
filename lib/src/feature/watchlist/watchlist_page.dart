@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../data/paging/paged_list_controller.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
-import '../illust/illust_detail_page.dart';
 
 /// 追更列表（连载漫画 / 小说）。
 ///
@@ -222,11 +222,7 @@ class _WatchlistTile extends StatelessWidget {
         // 小说暂无阅读页，只有漫画的最新一话能跳详情。
         onTap: latest == null || kind == _WatchlistKind.novel
             ? null
-            : () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => IllustDetailPage(illustId: latest),
-                ),
-              ),
+            : () => AppNavigator.openIllust(context, latest),
       ),
     );
   }

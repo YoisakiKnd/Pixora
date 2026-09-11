@@ -10,7 +10,6 @@ import '../mute/mute_actions.dart';
 import 'bookmark_toggle.dart';
 import 'download_pages_sheet.dart';
 import 'illust_more_actions.dart';
-import 'illust_detail_page.dart';
 
 Future<void> showIllustActionsSheet(
   BuildContext context,
@@ -110,11 +109,7 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
 
   void _openDetail() {
     Navigator.of(context).pop();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => IllustDetailPage(illustId: widget.illust.id),
-      ),
-    );
+    AppNavigator.openIllust(context, widget.illust.id);
   }
 
   Future<void> _chooseDownloadPages() async {

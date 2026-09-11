@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../illust/illust_grid.dart';
-import '../settings/settings_page.dart';
 import 'follow_button.dart';
 
 /// 用户主页。`userId` 传当前登录用户时即「我的」页。
@@ -96,9 +96,7 @@ class _UserPageState extends ConsumerState<UserPage> {
                   IconButton(
                     icon: const Icon(Icons.settings_outlined),
                     tooltip: '设置',
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SettingsPage()),
-                    ),
+                    onPressed: () => AppNavigator.openSettings(context),
                   ),
                 ],
               ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../data/settings/settings_controller.dart';
@@ -11,7 +12,6 @@ import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import 'bookmark_toggle.dart';
 import 'illust_actions_sheet.dart';
-import 'illust_detail_page.dart';
 
 class IllustGridView extends ConsumerStatefulWidget {
   const IllustGridView({
@@ -330,11 +330,7 @@ class _IllustCardBodyState extends ConsumerState<_IllustCardBody> {
     final current = widget.current;
     final masked = widget.dimmed || (widget.maskR18 && current.isRestricted);
     return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => IllustDetailPage(illustId: current.id),
-        ),
-      ),
+      onTap: () => AppNavigator.openIllust(context, current.id),
       onLongPress: () => showIllustActionsSheet(context, ref, current),
       borderRadius: BorderRadius.circular(4),
       child: AspectRatio(

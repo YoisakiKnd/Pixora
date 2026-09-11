@@ -9,7 +9,6 @@ import '../../data/download/download_manager.dart';
 import '../../data/download/download_task.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
-import '../illust/illust_detail_page.dart';
 
 /// 下载管理页。
 class DownloadsPage extends ConsumerWidget {
@@ -83,11 +82,7 @@ class _TaskTile extends ConsumerWidget {
       ),
       subtitle: _subtitle(theme, storage.displayPath(task.savePath)),
       trailing: _actions(manager),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => IllustDetailPage(illustId: task.illustId),
-        ),
-      ),
+      onTap: () => AppNavigator.openIllust(context, task.illustId),
     );
   }
 

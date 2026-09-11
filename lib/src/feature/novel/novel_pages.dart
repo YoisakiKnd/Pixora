@@ -281,9 +281,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   /// 跳到系列里的另一话。用 pushReplacement 避免在栈里堆积阅读页。
   void _openNovel(int novelId) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => NovelReaderPage(novelId: novelId)),
-    );
+    AppNavigator.push(context, NovelReaderPage(novelId: novelId));
   }
 
   Future<void> _clearProgress() async {

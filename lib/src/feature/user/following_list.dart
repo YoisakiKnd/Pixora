@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import 'follow_button.dart';
-import 'user_page.dart';
 
 /// 关注画师列表页。带公开 / 私密切换。
 class FollowingListPage extends ConsumerWidget {
@@ -252,9 +252,7 @@ class _UserTile extends ConsumerWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => UserPage(userId: preview.user.id)),
-        ),
+        onTap: () => AppNavigator.openUser(context, preview.user.id),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: Row(

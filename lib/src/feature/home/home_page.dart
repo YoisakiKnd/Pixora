@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../data/auth/auth_state.dart';
@@ -8,9 +9,7 @@ import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../auth/login_page.dart';
 import '../illust/illust_grid.dart';
-import '../profile/personal_hub_page.dart';
 import '../search/search_page.dart';
-import '../notice/notifications_page.dart';
 import '../settings/ranking_preferences_page.dart';
 import '../user/following_list.dart';
 
@@ -101,11 +100,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 IconButton(
                   icon: const Icon(Icons.notifications_none),
                   tooltip: '通知',
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationsPage(),
-                    ),
-                  ),
+                  onPressed: () => AppNavigator.openNotifications(context),
                 ),
               IconButton(
                 icon: const Icon(Icons.search),
@@ -118,9 +113,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 padding: const EdgeInsets.only(right: 10),
                 child: InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PersonalHubPage()),
-                  ),
+                  onTap: () => AppNavigator.openPersonalHub(context),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: ClipOval(

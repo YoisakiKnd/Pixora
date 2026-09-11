@@ -12,12 +12,6 @@ import '../../platform/proxy_settings.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/user_hint.dart';
 import '../auth/account_switch_sheet.dart';
-import '../download/downloads_page.dart';
-import '../mute/mute_settings_page.dart';
-import 'diagnostics_page.dart';
-import 'download_settings_page.dart';
-import 'proxy_settings_page.dart';
-import 'ranking_preferences_page.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -95,9 +89,7 @@ class SettingsPage extends ConsumerWidget {
                 title: '网络代理',
                 subtitle: '应用底层不读系统代理；这里可显式指定',
                 value: _proxyLabel(ref),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProxySettingsPage()),
-                ),
+                onTap: () => AppNavigator.openProxySettings(context),
               ),
             ],
           ),
@@ -122,11 +114,7 @@ class SettingsPage extends ConsumerWidget {
                 value: settings.rankingPreferencesConfigured
                     ? '${settings.rankingModes.length} 项'
                     : '未设置',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const RankingPreferencesPage(),
-                  ),
-                ),
+                onTap: () => AppNavigator.openRankingPreferences(context),
               ),
               ListTile(
                 leading: const _SettingIcon(Icons.favorite_outline),
@@ -147,29 +135,21 @@ class SettingsPage extends ConsumerWidget {
                 title: '屏蔽名单',
                 subtitle: '精确标签、通配符、正则、画师与作品',
                 value: '$muteCount 条',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const MuteSettingsPage()),
-                ),
+                onTap: () => AppNavigator.openMuteSettings(context),
               ),
               _NavigationTile(
                 icon: Icons.save_alt_outlined,
                 title: '下载设置',
                 subtitle: '保存目录、分类子目录和文件名模板',
                 value: settings.downloadPreferences.categoryPreset.label,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const DownloadSettingsPage(),
-                  ),
-                ),
+                onTap: () => AppNavigator.openDownloadSettings(context),
               ),
               _NavigationTile(
                 icon: Icons.download_outlined,
                 title: '下载管理',
                 subtitle: '查看下载任务、进度和保存位置；失败时优先检查代理',
                 value: '$downloadCount 项',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const DownloadsPage()),
-                ),
+                onTap: () => AppNavigator.openDownloads(context),
               ),
             ],
           ),
@@ -213,9 +193,7 @@ class SettingsPage extends ConsumerWidget {
                 title: '诊断日志',
                 subtitle: '导出最近的应用错误记录，便于反馈问题',
                 value: '${DiagnosticLog.entries.length} 条',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const DiagnosticsPage()),
-                ),
+                onTap: () => AppNavigator.openDiagnostics(context),
               ),
             ],
           ),
