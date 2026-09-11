@@ -83,6 +83,12 @@ class Paginator<T> {
   final List<T> _items = [];
   final Set<int> _seen = <int>{};
 
+  /// 上游累计返回的条数（**含重复与已过滤项**）。
+  ///
+  /// offset 降级必须用它而不是 `_seen.length`：后者是去重后的条数，
+  /// 上游吐回重复项时会偏小，导致反复拉同一页。
+  int _upstreamCount = 0;
+
   PageCursor _cursor = const OffsetCursor(0);
   bool _loading = false;
   bool _started = false;
@@ -118,6 +124,7 @@ class Paginator<T> {
       final page = await first();
       _items.clear();
       _seen.clear();
+      _upstreamCount = 0;
       _filteredOut = 0;
       _pagesFetched = 1;
       _absorb(page);
@@ -175,6 +182,7 @@ class Paginator<T> {
   /// 消化一页：去重 → 过滤 → 推进游标。
   void _absorb(PageResponse<T> page) {
     final predicate = where;
+    _upstreamCount += page.items.length;
 
     for (final item in page.items) {
       if (!_seen.add(idOf(item))) continue;
@@ -196,8 +204,10 @@ class Paginator<T> {
     // 注意这里用的是「上游返回条数」而不是「过滤后产出条数」：整页都被滤掉时
     // 仍然应该继续翻，否则一个高阈值过滤会把列表提前判成到底。
     if (byOffset != null && page.items.isNotEmpty) {
-      // offset 是上游游标，必须按**拉取过的条数**推进，不能用过滤后的 _items.length。
-      _cursor = OffsetCursor(_seen.length);
+      // offset 是上游游标，必须按**上游累计条数**推进 —— 既不能用过滤后的
+      // _items.length，也不能用去重后的 _seen.length（上游吐重复项时会偏小，
+      // 反复拉同一页）。
+      _cursor = OffsetCursor(_upstreamCount);
       return;
     }
 
@@ -215,6 +225,7 @@ class Paginator<T> {
   void clear() {
     _items.clear();
     _seen.clear();
+    _upstreamCount = 0;
     _cursor = const OffsetCursor(0);
     _started = false;
     _lastError = null;
