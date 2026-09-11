@@ -67,17 +67,12 @@ PixivClients buildPixivClients({
   // ---- OAuth 客户端 ----
   // 独立实例，只装 header + error。**绝不装 AuthInterceptor**，否则刷新失败会
   // 触发对刷新接口自身的刷新，形成递归。
-  final oauthDio =
-      Dio(
-          BaseOptions(
-            connectTimeout: connectTimeout,
-            receiveTimeout: receiveTimeout,
-          ),
-        )
-        ..interceptors.addAll([
-          PixivHeaderInterceptor(profile: profile, language: language),
-          PixivErrorInterceptor(),
-        ]);
+  //
+  // header 复用上面那个实例：oauthDio 若自建一份，切换语言时只有 apiDio 的
+  // accept-language 会更新，OAuth 的错误文案仍停留在启动时的语言。
+  final oauthDio = Dio(
+    BaseOptions(connectTimeout: connectTimeout, receiveTimeout: receiveTimeout),
+  )..interceptors.addAll([headerInterceptor, PixivErrorInterceptor()]);
 
   final oauthApi = OAuthApi(oauthDio);
   final refresher = TokenRefresher(oauthApi);

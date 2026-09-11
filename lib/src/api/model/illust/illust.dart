@@ -12,6 +12,13 @@ class MetaPage {
   factory MetaPage.fromJson(Map<String, dynamic> json) => MetaPage(
     imageUrls: ImageUrls.fromJson(asMap(json['image_urls']) ?? const {}),
   );
+
+  @override
+  bool operator ==(Object other) =>
+      other is MetaPage && other.imageUrls == imageUrls;
+
+  @override
+  int get hashCode => imageUrls.hashCode;
 }
 
 /// 作品所属的系列。
@@ -23,6 +30,13 @@ class IllustSeries {
 
   factory IllustSeries.fromJson(Map<String, dynamic> json) =>
       IllustSeries(id: asInt(json['id']), title: asString(json['title']));
+
+  @override
+  bool operator ==(Object other) =>
+      other is IllustSeries && other.id == id && other.title == title;
+
+  @override
+  int get hashCode => Object.hash(id, title);
 }
 
 enum IllustType {
@@ -212,7 +226,7 @@ class Illust {
     // 新数据本身就是完整版：直接采用，无需回填。
     if (incoming.isFullVersion) return incoming;
 
-    return Illust(
+    final merged = Illust(
       // 恒定字段以新数据为准。
       id: incoming.id,
       title: incoming.title.isEmpty ? title : incoming.title,
@@ -246,7 +260,77 @@ class Illust {
       // 曾经拿到过完整数据这件事要保留下来。
       isFullVersion: isFullVersion,
     );
+
+    // 内容与当前实例完全一致时返回 this。ObjectPool 的条目是 ValueNotifier，
+    // 以 == 判定是否通知；返回新实例会让「重新 put 一遍已加载的列表」触发
+    // 全屏重建。引用相等是这里唯一能拦住该开销的判据。
+    return merged == this ? this : merged;
   }
+
+  /// 值语义。
+  ///
+  /// [isFullVersion] **不参与**比较：它描述的是「数据来源的完整度」而非作品
+  /// 内容本身。若把它算进去，「完整版 → 精简版」的合并会因标记不同而永远
+  /// 判定为变化，合并优化随即失效。
+  @override
+  bool operator ==(Object other) =>
+      other is Illust &&
+      other.id == id &&
+      other.title == title &&
+      other.type == type &&
+      other.imageUrls == imageUrls &&
+      other.user == user &&
+      other.caption == caption &&
+      other.restrict == restrict &&
+      _listEquals(other.tags, tags) &&
+      _listEquals(other.tools, tools) &&
+      other.createDate == createDate &&
+      other.pageCount == pageCount &&
+      other.width == width &&
+      other.height == height &&
+      other.sanityLevel == sanityLevel &&
+      other.xRestrict == xRestrict &&
+      other.series == series &&
+      other.singlePageOriginalUrl == singlePageOriginalUrl &&
+      _listEquals(other.metaPages, metaPages) &&
+      other.totalView == totalView &&
+      other.totalBookmarks == totalBookmarks &&
+      other.totalComments == totalComments &&
+      other.isBookmarked == isBookmarked &&
+      other.isBookmarkedPrivate == isBookmarkedPrivate &&
+      other.visible == visible &&
+      other.isMuted == isMuted &&
+      other.illustAiType == illustAiType;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    title,
+    type,
+    imageUrls,
+    user,
+    caption,
+    restrict,
+    Object.hashAll(tags),
+    Object.hashAll(tools),
+    createDate,
+    pageCount,
+    width,
+    height,
+    sanityLevel,
+    xRestrict,
+    series,
+    singlePageOriginalUrl,
+    Object.hashAll(metaPages),
+    totalView,
+    totalBookmarks,
+    totalComments,
+    isBookmarked,
+    isBookmarkedPrivate,
+    visible,
+    isMuted,
+    illustAiType,
+  ]);
 
   /// 本地乐观更新作者关注状态用。
   Illust copyWithUser(PixivUser value) => Illust(
@@ -316,4 +400,15 @@ class Illust {
     illustAiType: illustAiType,
     isFullVersion: isFullVersion,
   );
+}
+
+/// 逐元素相等。`package:collection` 的 ListEquality 会为一个纯 Dart 模型层
+/// 引入额外依赖，这里手写足够。
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }

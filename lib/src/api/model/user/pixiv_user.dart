@@ -59,6 +59,32 @@ class PixivUser {
         isAccessBlockingUser: isAccessBlockingUser,
         comment: comment,
       );
+
+  /// 值语义。ObjectPool 靠它判断「合并后是否真的变了」，从而跳过无意义的
+  /// 通知与重建，见 Illust.mergeWith 的说明。
+  @override
+  bool operator ==(Object other) =>
+      other is PixivUser &&
+      other.id == id &&
+      other.name == name &&
+      other.account == account &&
+      other.profileImageUrls == profileImageUrls &&
+      other.isFollowed == isFollowed &&
+      other.isPrivatelyFollowed == isPrivatelyFollowed &&
+      other.isAccessBlockingUser == isAccessBlockingUser &&
+      other.comment == comment;
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    account,
+    profileImageUrls,
+    isFollowed,
+    isPrivatelyFollowed,
+    isAccessBlockingUser,
+    comment,
+  );
 }
 
 /// 搜索用户 / 推荐用户接口返回的形状：user + 其代表作。

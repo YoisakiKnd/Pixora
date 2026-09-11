@@ -44,6 +44,9 @@ class _IllustGridViewState extends ConsumerState<IllustGridView>
   late final Paginator<Illust> _paginator;
   final _scrollController = ScrollController();
   final List<Illust> _appendedBookmarks = [];
+
+  /// 已并入对象池的作品 id。用于让 [_absorbIntoPool] 只处理增量。
+  final Set<int> _absorbedIds = <int>{};
   Object? _error;
   bool _initialLoading = true;
 
@@ -81,7 +84,13 @@ class _IllustGridViewState extends ConsumerState<IllustGridView>
     });
     try {
       await _paginator.refresh();
+      // await 期间 widget 可能已被 dispose（切标签 / 切账号 / 返回）。
+      // 此时访问 ref 会抛「Cannot use ref after dispose」，必须先挡住。
+      if (!mounted) return;
       _appendedBookmarks.clear();
+      // 刷新后分页器是全新的一批，重新走一遍并入；内容未变的条目会被
+      // mergeWith 的引用相等短路，不会触发通知。
+      _absorbedIds.clear();
       _absorbIntoPool();
       if (refreshing) {
         ref
@@ -89,6 +98,7 @@ class _IllustGridViewState extends ConsumerState<IllustGridView>
             .success(key: 'grid-refresh', title: '内容已刷新');
       }
     } catch (error) {
+      if (!mounted) return;
       _error = error;
       if (!_paginator.isEmpty) {
         ref
@@ -108,16 +118,27 @@ class _IllustGridViewState extends ConsumerState<IllustGridView>
     if (_paginator.isLoading || !_paginator.hasMore) return;
     try {
       await _paginator.loadMore();
+      if (!mounted) return;
       _absorbIntoPool();
-      if (mounted) setState(() {});
+      setState(() {});
     } catch (error) {
+      if (!mounted) return;
       _error = error;
-      if (mounted) setState(() {});
+      setState(() {});
     }
   }
 
-  void _absorbIntoPool() =>
-      ref.read(objectPoolProvider).illusts.putAll(_paginator.items);
+  /// 把分页器里的作品并入对象池。
+  ///
+  /// 只 put 本次新增的条目：全量重 put 虽因 [Illust.mergeWith] 的引用相等短路
+  /// 而不会触发通知，但每次 loadMore 仍会遍历整个已加载列表并构造合并结果。
+  /// 用 [_absorbedIds] 过滤，把开销压到增量。
+  void _absorbIntoPool() {
+    final pool = ref.read(objectPoolProvider).illusts;
+    for (final item in _paginator.items) {
+      if (_absorbedIds.add(item.id)) pool.put(item);
+    }
+  }
 
   void _appendBookmarked(Illust illust) {
     if (_paginator.items.any((item) => item.id == illust.id) ||
@@ -203,26 +224,44 @@ class IllustMasonrySliver extends StatelessWidget {
   final String Function(Illust illust)? dimLabel;
   final ValueChanged<Illust>? onBookmarked;
 
+  /// 目标卡片宽度。桌面宽窗口下用它把列数撑开，而不是把卡片拉成大色块。
+  static const targetCardWidth = 260.0;
+
+  /// 按可用宽度算列数：手机竖屏 2 列，窗口越宽列越多，上限 [maxColumns]。
+  static int columnsFor(double width, {int maxColumns = 8}) {
+    if (!width.isFinite || width <= 0) return 2;
+    final fit = (width / targetCardWidth).floor();
+    return fit.clamp(2, maxColumns);
+  }
+
   @override
-  Widget build(BuildContext context) => SliverPadding(
-    padding: const EdgeInsets.all(3),
-    sliver: SliverMasonryGrid.count(
-      crossAxisCount: 2,
-      mainAxisSpacing: 3,
-      crossAxisSpacing: 3,
-      childCount: items.length,
-      itemBuilder: (context, index) {
-        final illust = items[index];
-        return _IllustCard(
-          illust: illust,
-          dimWhen: dimWhen,
-          dimLabel: dimLabel,
-          onBookmarked: onBookmarked == null
-              ? null
-              : () => onBookmarked!(illust),
-        );
-      },
-    ),
+  Widget build(BuildContext context) => SliverLayoutBuilder(
+    // 必须用 SliverLayoutBuilder 而非 LayoutBuilder：后者的 builder 返回的是
+    // 盒模型 widget，放进 slivers 列表会直接抛类型错误。crossAxisExtent 即
+    // 视口可用宽度。
+    builder: (context, constraints) {
+      final columns = columnsFor(constraints.crossAxisExtent);
+      return SliverPadding(
+        padding: const EdgeInsets.all(3),
+        sliver: SliverMasonryGrid.count(
+          crossAxisCount: columns,
+          mainAxisSpacing: 3,
+          crossAxisSpacing: 3,
+          childCount: items.length,
+          itemBuilder: (context, index) {
+            final illust = items[index];
+            return _IllustCard(
+              illust: illust,
+              dimWhen: dimWhen,
+              dimLabel: dimLabel,
+              onBookmarked: onBookmarked == null
+                  ? null
+                  : () => onBookmarked!(illust),
+            );
+          },
+        ),
+      );
+    },
   );
 }
 
@@ -241,7 +280,10 @@ class _IllustCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsControllerProvider);
+    // 只订阅卡片真正依赖的两个字段：改下载偏好 / 语言 / 排行榜时不再重建
+    // 整屏卡片（这些设置在 SettingsController 里与卡片共用同一个通知源）。
+    final bookmarkCorner = ref.watch(bookmarkButtonCornerProvider);
+    final maskR18 = ref.watch(maskR18Provider);
     final notifier = ref.read(objectPoolProvider).illusts.track(illust);
     return ValueListenableBuilder<Illust>(
       valueListenable: notifier,
@@ -251,8 +293,8 @@ class _IllustCard extends ConsumerWidget {
           current: current,
           dimmed: dimmed,
           dimLabel: dimmed ? dimLabel?.call(current) : null,
-          bookmarkCorner: settings.bookmarkButtonCorner,
-          maskR18: settings.maskR18,
+          bookmarkCorner: bookmarkCorner,
+          maskR18: maskR18,
           onBookmarked: onBookmarked,
         );
       },

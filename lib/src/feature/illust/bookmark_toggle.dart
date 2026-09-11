@@ -74,12 +74,14 @@ Future<bool?> toggleBookmark(
     );
     return willBookmark;
   } on PixivException catch (error) {
-    _apply(
+    // 回滚必须**抵消**乐观更新：池中对象此刻已是「操作后」的值，直接用
+    // current.totalBookmarks 覆盖，避免 delta 记账在失败路径上永久偏移
+    // （收藏失败多 1 / 取消失败少 1）。
+    _restore(
       pool,
       current,
       isBookmarked: wasPublic,
       isBookmarkedPrivate: wasPrivate,
-      delta: 0,
     );
     feedback.error(
       key: key,
@@ -103,6 +105,26 @@ void _apply(
       isBookmarked: isBookmarked,
       isBookmarkedPrivate: isBookmarkedPrivate,
       totalBookmarks: item.totalBookmarks + delta,
+    ),
+  );
+}
+
+/// 失败回滚：把收藏状态与**收藏数**一并还原到操作前的快照。
+///
+/// 不能复用 [_apply] 的 delta 记账 —— 它作用在「已乐观更新过」的池对象上，
+/// 回滚时再叠加 delta 只会把误差留在计数里。这里直接用 [illust] 的绝对值覆盖。
+void _restore(
+  ObjectPool pool,
+  Illust illust, {
+  required bool isBookmarked,
+  required bool isBookmarkedPrivate,
+}) {
+  pool.illusts.update(
+    illust.id,
+    (item) => item.copyWithBookmark(
+      isBookmarked: isBookmarked,
+      isBookmarkedPrivate: isBookmarkedPrivate,
+      totalBookmarks: illust.totalBookmarks,
     ),
   );
 }

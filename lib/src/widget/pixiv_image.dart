@@ -30,9 +30,11 @@ class PixivImage extends StatelessWidget {
   final Widget? placeholderWidget;
   final Widget? errorWidget;
 
-  static const headers = <String, String>{
+  /// 图片请求头。UA 引用 [PixivClientProfile.defaults]，避免与 API 头各写一份
+  /// 版本号后在升级时漏改其一。
+  static final headers = <String, String>{
     'Referer': PixivHosts.imageReferer,
-    'User-Agent': 'PixivIOSApp/8.6.10 (iOS 26.5; iPhone16,2)',
+    'User-Agent': PixivClientProfile.defaults.userAgent,
   };
 
   @override

@@ -32,6 +32,17 @@ class ImageUrls {
       medium == null &&
       large == null &&
       original == null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ImageUrls &&
+      other.squareMedium == squareMedium &&
+      other.medium == medium &&
+      other.large == large &&
+      other.original == original;
+
+  @override
+  int get hashCode => Object.hash(squareMedium, medium, large, original);
 }
 
 /// 用户头像。
@@ -58,4 +69,15 @@ class ProfileImageUrls {
 
   /// 可用的最大尺寸头像。
   String? get best => px170 ?? medium ?? px50 ?? px16;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProfileImageUrls &&
+      other.medium == medium &&
+      other.px16 == px16 &&
+      other.px50 == px50 &&
+      other.px170 == px170;
+
+  @override
+  int get hashCode => Object.hash(medium, px16, px50, px170);
 }

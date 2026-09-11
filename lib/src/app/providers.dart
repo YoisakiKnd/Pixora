@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/auth/auth_callback_bus.dart';
@@ -17,8 +18,10 @@ import '../data/download/drift_download_repository.dart';
 import '../data/history/browse_history_repository.dart';
 import '../data/mute/drift_mute_repository.dart';
 import '../data/mute/mute_store.dart';
+import '../data/novel/novel_progress_repository.dart';
 import '../data/pool/object_pool.dart';
 import '../data/search/search_history_repository.dart';
+import '../data/settings/proxy_controller.dart';
 import '../data/settings/settings_controller.dart';
 import '../platform/app_links_callback_source.dart';
 import '../platform/download_storage.dart';
@@ -43,8 +46,43 @@ final accountRepositoryProvider = Provider<AccountRepository>(
   ),
 );
 
+/// 代理设置。独立于 SettingsController，避免与 pixivClients 形成循环依赖。
+final proxyControllerProvider = ChangeNotifierProvider<ProxyController>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final controller = ProxyController(
+    DriftProxyPreferencesRepository(
+      (key) async {
+        final row = await (db.select(
+          db.appKv,
+        )..where((t) => t.key.equals(key))).getSingleOrNull();
+        return row?.value;
+      },
+      (key, value) => db
+          .into(db.appKv)
+          .insertOnConflictUpdate(
+            AppKvCompanion.insert(key: key, value: Value(value)),
+          ),
+    ),
+  );
+  // 首帧就要拿到代理，否则首个请求会走直连。
+  unawaited(controller.load());
+  return controller;
+});
+
+/// 当前生效的代理串（应用内设置 > 系统代理 > 直连）。
+///
+/// 单独抽成 provider 是为了让 [pixivClientsProvider] 只依赖**值**，而不是
+/// 依赖整个 `ProxyController`。ProxyController 是 ChangeNotifier，`load()`
+/// 完成、保存设置都会 notifyListeners —— 直接 watch 它会让整套 Dio 客户端
+/// 被反复重建（丢弃连接池、重建拦截器），代价远大于收益。
+final effectiveProxyProvider = Provider<String?>(
+  (ref) => ref.watch(proxyControllerProvider).effectiveProxy,
+);
+
 final pixivClientsProvider = Provider<PixivClients>((ref) {
-  final clients = buildPixivClients();
+  // 只在代理**值**变化时重建（Provider 用 == 判定依赖是否变化）。
+  final proxy = ref.watch(effectiveProxyProvider);
+  final clients = buildPixivClients(proxy: proxy);
   ref.onDispose(clients.dispose);
   return clients;
 });
@@ -62,6 +100,21 @@ final settingsControllerProvider = ChangeNotifierProvider<SettingsController>((
     (language) => clients.language = language,
   );
 });
+
+/// 卡片渲染真正依赖的两个设置项。
+///
+/// 直接 watch [settingsControllerProvider] 会让「改下载偏好 / 排行榜 / 语言」
+/// 这类与卡片无关的变更也重建整屏卡片 —— SettingsController 是单个大
+/// ChangeNotifier，粒度太粗。用 select 把依赖收窄到具体字段。
+final bookmarkButtonCornerProvider = Provider<BookmarkButtonCorner>(
+  (ref) => ref.watch(
+    settingsControllerProvider.select((s) => s.bookmarkButtonCorner),
+  ),
+);
+
+final maskR18Provider = Provider<bool>(
+  (ref) => ref.watch(settingsControllerProvider.select((s) => s.maskR18)),
+);
 
 final browseHistoryRepositoryProvider = Provider<BrowseHistoryRepository>(
   (ref) => BrowseHistoryRepository(ref.watch(appDatabaseProvider)),
@@ -124,6 +177,10 @@ final downloadManagerProvider = ChangeNotifierProvider<DownloadManager>((ref) {
   ref.onDispose(() => flushTimer?.cancel());
   return manager;
 });
+
+final novelProgressRepositoryProvider = Provider<NovelProgressRepository>(
+  (ref) => NovelProgressRepository(ref.watch(appDatabaseProvider)),
+);
 
 final searchHistoryRepositoryProvider = Provider<SearchHistoryRepository>(
   (ref) => SearchHistoryRepository(ref.watch(appDatabaseProvider)),

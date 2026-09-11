@@ -5,7 +5,10 @@ import '../api/auth/secret_store.dart';
 /// [SecretStore] 的平台实现。
 ///
 /// * Android：EncryptedSharedPreferences（底层是 Keystore）
-/// * Windows：凭据管理器（DPAPI，绑定当前 Windows 用户账户）
+/// * Windows：DPAPI 加密的 JSON 文件（flutter_secure_storage_windows 3.x 的
+///   默认实现 DpapiJsonFileMapStorage），加解密绑定当前 Windows 用户账户。
+///   注意**不是**凭据管理器 —— Credential Manager 只是该插件的
+///   useBackwardCompatibility 兼容路径，本项目未启用。
 ///
 /// 刻意**不在这之上再套一层自己的 AES**：平台密钥库已经是 OS 级别的最强边界，
 /// 再加一层只会引入「那把密钥又存哪」的循环问题，并给用户虚假的安全感。

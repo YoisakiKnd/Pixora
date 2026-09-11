@@ -27,7 +27,8 @@ dependencies:
   # 拉起默认浏览器。走系统浏览器而非内嵌 WebView 是为了带真实指纹和已有 cookie，
   # 显著降低 pixiv 的 reCAPTCHA 触发率（照抄 Shaft）。
   url_launcher: ^6.3.2
-  # refresh_token 等价于永久密码：Android 走 Keystore，Windows 走凭据管理器(DPAPI)。
+  # refresh_token 等价于永久密码：Android 走 Keystore，Windows 走 DPAPI 加密文件
+  # （flutter_secure_storage_windows 3.x 的默认实现，绑定当前 Windows 用户账户）。
   # PixEz 明文存 sqlite，在 Windows 上任何本地进程都能读到。
   flutter_secure_storage: ^9.2.4
   # Windows 注册 pixiv:// 协议（HKCU，不需要管理员权限）。

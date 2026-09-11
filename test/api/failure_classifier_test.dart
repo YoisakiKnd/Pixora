@@ -43,11 +43,39 @@ void main() {
       expect(result, isA<PixivAuthException>());
     });
 
-    test('限流靠 body 含 Limit 识别，不是 HTTP 429', () {
+    test('限流靠 body 含 Rate Limit 识别，不是 HTTP 429', () {
       final result = classifyPixivFailure(400, {
         'error': {'message': 'Rate Limit', 'user_message': ''},
       });
       expect(result, isA<PixivRateLimitException>());
+    });
+
+    test('snake_case 的 rate_limit 也识别为限流', () {
+      final result = classifyPixivFailure(400, {
+        'error': {'message': 'rate_limit exceeded', 'user_message': ''},
+      });
+      expect(result, isA<PixivRateLimitException>());
+    });
+
+    test('参数错误回显里的 search_span_limit 不会被误判成限流', () {
+      // 历史 bug：裸子串 'Limit' 会把这类正常字段判成限流，导致本该重试的
+      // 瞬时错误不重试、且提示「请求过于频繁」。
+      final result = classifyPixivFailure(400, {
+        'error': {
+          'user_message': '参数不正确',
+          'message': 'search_span_limit is too large',
+        },
+        'search_span_limit': 2592000,
+      });
+      expect(result, isA<PixivApiException>());
+      expect(result, isNot(isA<PixivRateLimitException>()));
+    });
+
+    test('小写 limit 字段同样不触发限流', () {
+      final result = classifyPixivFailure(400, {
+        'error': {'message': 'offset limit reached', 'user_message': ''},
+      });
+      expect(result, isNot(isA<PixivRateLimitException>()));
     });
 
     test('普通 400 参数错误不会被误判成 token 过期', () {

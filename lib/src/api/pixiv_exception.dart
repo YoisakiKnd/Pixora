@@ -184,8 +184,13 @@ const _invalidTokenMarkers = <String>[
   'invalid_grant',
 ];
 
-/// 限流标记。PixEz 检测到后立即停止重试。
-const _rateLimitMarker = 'Limit';
+/// 限流标记。
+///
+/// **不能用裸子串 `Limit`**：pixiv 的普通错误体里会合法出现 `search_span_limit`、
+/// `limit` 等字段（参数校验失败时的回显），全 body 子串匹配会把它们误判成限流 ——
+/// 后果是 RetryInterceptor 拒绝重试 + 用户看到「请求过于频繁」，而真实原因是参数错误。
+/// 只认 pixiv 实际用于限流的那几种措辞。
+const _rateLimitMarkers = <String>['Rate Limit', 'rate_limit', 'RateLimit'];
 
 /// 把一个失败响应归类成具体的 [PixivException]。
 ///
@@ -196,7 +201,7 @@ PixivException classifyPixivFailure(int? statusCode, Object? body) {
   if (_invalidTokenMarkers.any(raw.contains)) {
     return PixivAuthException(AuthFailureReason.invalidGrant, detail: raw);
   }
-  if (raw.contains(_rateLimitMarker)) {
+  if (_rateLimitMarkers.any(raw.contains)) {
     return PixivRateLimitException(raw: raw);
   }
 
