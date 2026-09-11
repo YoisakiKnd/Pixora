@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/pixiv_api.dart';
+import '../../app/app_navigator.dart';
+import '../../app/diagnostics.dart';
 import '../../app/providers.dart';
 import '../../data/auth/auth_state.dart';
 import '../../data/db/app_database.dart';
 import '../../data/settings/settings_controller.dart';
+import '../../platform/proxy_settings.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/user_hint.dart';
 import '../auth/account_switch_sheet.dart';
 import '../download/downloads_page.dart';
 import '../mute/mute_settings_page.dart';
+import 'diagnostics_page.dart';
 import 'download_settings_page.dart';
+import 'proxy_settings_page.dart';
 import 'ranking_preferences_page.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -51,12 +56,15 @@ class SettingsPage extends ConsumerWidget {
               ),
               _NavigationTile(
                 icon: Icons.translate,
-                title: '界面消息语言',
-                subtitle: 'Pixiv 返回的提示与错误文案',
+                title: 'Pixiv 提示语言',
+                // 只影响服务端返回的 user_message。应用自身界面文案目前是
+                // 硬编码中文，与这一项无关 —— 标题必须说清楚，否则用户会
+                // 以为整个界面可以切换语言。
+                subtitle: '仅影响 Pixiv 返回的提示与错误文案，不改变应用界面语言',
                 value: _languageLabel(settings.uiLanguage),
                 onTap: () => _chooseLanguage(
                   context,
-                  title: '界面消息语言',
+                  title: 'Pixiv 提示语言',
                   selected: settings.uiLanguage,
                   onSelected: settings.setUiLanguage,
                 ),
@@ -80,6 +88,19 @@ class SettingsPage extends ConsumerWidget {
             const _SettingsCard(children: [_AccountPreferenceTiles()]),
           ],
           const _SectionTitle('网络'),
+          _SettingsCard(
+            children: [
+              _NavigationTile(
+                icon: Icons.vpn_lock_outlined,
+                title: '网络代理',
+                subtitle: '应用底层不读系统代理；这里可显式指定',
+                value: _proxyLabel(ref),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ProxySettingsPage()),
+                ),
+              ),
+            ],
+          ),
           const Padding(
             padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
             child: UserHint(
@@ -173,6 +194,31 @@ class SettingsPage extends ConsumerWidget {
             ),
           ],
           const _SectionTitle('关于'),
+          _SettingsCard(
+            children: [
+              _NavigationTile(
+                icon: Icons.campaign_outlined,
+                title: '官方公告',
+                subtitle: 'pixiv 的服务与活动公告',
+                onTap: () => AppNavigator.openAnnouncements(context),
+              ),
+              _NavigationTile(
+                icon: Icons.auto_stories_outlined,
+                title: '特辑',
+                subtitle: 'pixiv 官方策划的专题文章',
+                onTap: () => AppNavigator.openSpotlight(context),
+              ),
+              _NavigationTile(
+                icon: Icons.bug_report_outlined,
+                title: '诊断日志',
+                subtitle: '导出最近的应用错误记录，便于反馈问题',
+                value: '${DiagnosticLog.entries.length} 条',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DiagnosticsPage()),
+                ),
+              ),
+            ],
+          ),
           const _SettingsCard(
             children: [
               ListTile(
@@ -194,6 +240,16 @@ class SettingsPage extends ConsumerWidget {
   }
 
   static String _themeLabel(AppThemeMode mode) => mode.label;
+
+  /// 代理入口右侧的状态文案。
+  static String _proxyLabel(WidgetRef ref) {
+    final controller = ref.watch(proxyControllerProvider);
+    return switch (controller.source) {
+      ProxySource.manual => controller.settings.authority ?? '已启用',
+      ProxySource.system => '跟随系统',
+      ProxySource.none => '直连',
+    };
+  }
 
   static String _languageLabel(String code) {
     for (final (value, label) in _languages) {

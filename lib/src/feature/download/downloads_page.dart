@@ -3,13 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../app/providers.dart';
 import '../../data/download/download_manager.dart';
 import '../../data/download/download_task.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
 import '../illust/illust_detail_page.dart';
-import '../settings/download_settings_page.dart';
 
 /// 下载管理页。
 class DownloadsPage extends ConsumerWidget {
@@ -27,9 +27,7 @@ class DownloadsPage extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: '下载设置',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const DownloadSettingsPage()),
-            ),
+            onPressed: () => AppNavigator.openDownloadSettings(context),
           ),
           if (tasks.any((t) => t.isFinished))
             IconButton(

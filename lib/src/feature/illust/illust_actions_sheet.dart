@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/operation_feedback.dart';
-import '../download/downloads_page.dart';
 import '../mute/mute_actions.dart';
 import 'bookmark_toggle.dart';
 import 'download_pages_sheet.dart';
+import 'illust_more_actions.dart';
 import 'illust_detail_page.dart';
 
 Future<void> showIllustActionsSheet(
@@ -79,18 +80,14 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
           title: '已加入下载队列',
           message: '$added 张原图',
           actionLabel: '查看',
-          onAction: () => navigator.push(
-            MaterialPageRoute(builder: (_) => const DownloadsPage()),
-          ),
+          onAction: () => AppNavigator.openDownloadsState(navigator),
         );
       } else {
         feedback.info(
           key: 'download-prepare',
           title: '已在下载队列或已经完成',
           actionLabel: '查看',
-          onAction: () => navigator.push(
-            MaterialPageRoute(builder: (_) => const DownloadsPage()),
-          ),
+          onAction: () => AppNavigator.openDownloadsState(navigator),
         );
       }
     } on PixivException catch (error) {
@@ -214,6 +211,39 @@ class _IllustActionsSheetState extends ConsumerState<_IllustActionsSheet> {
               title: const Text('屏蔽作品、画师或标签'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _openMuteSheet,
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.share_outlined),
+              title: const Text('分享作品'),
+              onTap: () => IllustMoreActions.share(ref, _current),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.link),
+              title: const Text('复制作品链接'),
+              onTap: () => IllustMoreActions.copyLink(ref, _current),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.open_in_browser),
+              title: const Text('在浏览器中打开'),
+              onTap: () => IllustMoreActions.openInBrowser(ref, _current),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.flag_outlined,
+                color: theme.colorScheme.error,
+              ),
+              title: Text(
+                '举报作品',
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                showIllustReportSheet(context, ref, _current);
+              },
             ),
           ],
         ),

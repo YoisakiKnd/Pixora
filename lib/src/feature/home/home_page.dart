@@ -10,6 +10,7 @@ import '../auth/login_page.dart';
 import '../illust/illust_grid.dart';
 import '../profile/personal_hub_page.dart';
 import '../search/search_page.dart';
+import '../notice/notifications_page.dart';
 import '../settings/ranking_preferences_page.dart';
 import '../user/following_list.dart';
 
@@ -20,9 +21,24 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
+/// 发现页的作品分区。
+///
+/// 这几个服务一直存在但没有入口；用一个 chip 行把它们暴露出来，
+/// 避免为每个分区再占一个底部 Tab（会挤掉「动态 / 排行」）。
+enum DiscoverSection {
+  recommended('推荐'),
+  manga('漫画'),
+  newest('最新'),
+  mypixiv('好P友');
+
+  const DiscoverSection(this.label);
+  final String label;
+}
+
 class _HomePageState extends ConsumerState<HomePage> {
   int _index = 0;
   RankingMode? _rankingMode;
+  DiscoverSection _discoverSection = DiscoverSection.recommended;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +65,14 @@ class _HomePageState extends ConsumerState<HomePage> {
         final content = Column(
           children: [
             if (authState is AuthNeedsReauth) const _ReauthBanner(),
+            if (_index == 0)
+              _DiscoverChips(
+                selected: _discoverSection,
+                // 未登录时好P友不可用。
+                includeMypixiv: account != null,
+                onSelected: (section) =>
+                    setState(() => _discoverSection = section),
+              ),
             if (_index == 2 && settings.rankingPreferencesConfigured)
               _RankingChips(
                 modes: rankingModes,
@@ -73,6 +97,16 @@ class _HomePageState extends ConsumerState<HomePage> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             actions: [
+              if (account != null)
+                IconButton(
+                  icon: const Icon(Icons.notifications_none),
+                  tooltip: '通知',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationsPage(),
+                    ),
+                  ),
+                ),
               IconButton(
                 icon: const Icon(Icons.search),
                 tooltip: '搜索',
@@ -162,14 +196,44 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _discoverTab() => IllustGridView(
-    emptyHint: '暂时没有推荐内容。可下拉刷新；若持续空白，请检查系统代理 / VPN',
-    appendBookmarkedToEnd: true,
+    // key 里带上分区：切换时重建分页器，避免把上一个分区的数据留在池里。
+    key: ValueKey(_discoverSection),
+    emptyHint: _discoverEmptyHint(_discoverSection),
+    appendBookmarkedToEnd: _discoverSection == DiscoverSection.recommended,
     createPaginator: (api) => Paginator<Illust>(
-      first: () => api.illust.recommended(),
+      first: () => switch (_discoverSection) {
+        DiscoverSection.recommended => api.illust.recommended(),
+        DiscoverSection.manga => api.illust.mangaRecommended(),
+        DiscoverSection.newest => api.illust.newest(),
+        DiscoverSection.mypixiv => api.illust.mypixiv(),
+      },
       byNextUrl: api.illust.nextIllusts,
+      // offset 兜底只在真正支持 offset 的分区启用。
+      // **newest 不能给兜底**：它的游标是 `max_illust_id`，传 offset 无效 ——
+      // 兜底只会一遍遍重复拉第一页。没有 next_url 时宁可判到底。
+      byOffset: switch (_discoverSection) {
+        DiscoverSection.newest => null,
+        DiscoverSection.mypixiv => (offset) => api.illust.mypixiv(
+          offset: offset,
+        ),
+        DiscoverSection.manga => (offset) => api.illust.mangaRecommended(
+          offset: offset,
+        ),
+        DiscoverSection.recommended => (offset) => api.illust.recommended(
+          offset: offset,
+        ),
+      },
       idOf: (item) => item.id,
     ),
   );
+
+  static String _discoverEmptyHint(DiscoverSection section) =>
+      switch (section) {
+        DiscoverSection.recommended => '暂时没有推荐内容。可下拉刷新；若持续空白，请检查系统代理 / VPN',
+        DiscoverSection.manga => '暂时没有漫画推荐。可下拉刷新或检查网络',
+        DiscoverSection.newest => '暂时没有最新投稿。可下拉刷新或检查网络',
+        DiscoverSection.mypixiv => '好P友还没有新作品。可去搜索或关注更多画师',
+      };
 
   Widget _followTab() => const _ActivityTab();
 
@@ -260,8 +324,44 @@ class _BookmarkListViewState extends ConsumerState<_BookmarkListView>
     with AutomaticKeepAliveClientMixin {
   Restrict _restrict = Restrict.public;
 
+  /// 当前选中的收藏分类标签。null 表示「全部」。
+  String? _tag;
+
+  /// 已加载的标签列表。懒加载：切换公开/私密时才拉一次。
+  List<BookmarkTag> _tags = const [];
+
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTags();
+  }
+
+  Future<void> _loadTags() async {
+    try {
+      final page = await ref
+          .read(pixivApiProvider)
+          .bookmark
+          .illustTags(widget.userId, restrict: _restrict);
+      if (!mounted) return;
+      setState(() => _tags = page.items);
+    } catch (_) {
+      // 标签是增强功能，拉不到就只显示「全部」，不影响收藏列表本身。
+      if (mounted) setState(() => _tags = const []);
+    }
+  }
+
+  void _onRestrictChanged(Restrict value) {
+    setState(() {
+      _restrict = value;
+      // 换公开/私密后标签集合不同，必须重置选中项。
+      _tag = null;
+      _tags = const [];
+    });
+    _loadTags();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -284,15 +384,39 @@ class _BookmarkListViewState extends ConsumerState<_BookmarkListView>
               ),
             ],
             selected: {_restrict},
-            onSelectionChanged: (values) =>
-                setState(() => _restrict = values.single),
+            onSelectionChanged: (values) => _onRestrictChanged(values.single),
           ),
         ),
+        if (_tags.isNotEmpty)
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                ChoiceChip(
+                  label: const Text('全部'),
+                  selected: _tag == null,
+                  onSelected: (_) => setState(() => _tag = null),
+                ),
+                for (final tag in _tags) ...[
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: Text('${tag.name} (${tag.count})'),
+                    selected: _tag == tag.name,
+                    onSelected: (_) => setState(() => _tag = tag.name),
+                  ),
+                ],
+              ],
+            ),
+          ),
         Expanded(
           child: _BookmarkGrid(
-            key: ValueKey(_restrict),
+            // tag 进 key：切换分类时重建分页器，避免混入上一个标签的数据。
+            key: ValueKey('$_restrict/$_tag'),
             userId: widget.userId,
             restrict: _restrict,
+            tag: _tag,
           ),
         ),
       ],
@@ -305,26 +429,72 @@ class _BookmarkGrid extends StatelessWidget {
     super.key,
     required this.userId,
     required this.restrict,
+    this.tag,
   });
 
   final int userId;
   final Restrict restrict;
 
+  /// 收藏分类标签筛选。null 表示不筛选。
+  final String? tag;
+
   @override
-  Widget build(BuildContext context) => IllustGridView(
-    emptyHint: restrict == Restrict.private
-        ? '没有私密收藏。可在作品卡片或详情页收藏后切换为私密'
-        : '还没有收藏。可在发现页点卡片左上角收藏按钮添加',
-    keepAlive: true,
-    createPaginator: (api) => Paginator<Illust>(
-      first: () => api.bookmark.illusts(userId, restrict: restrict),
-      byNextUrl: api.illust.nextIllusts,
-      byOffset: (offset) => api.bookmark.illustsByOffset(
-        userId,
-        restrict: restrict,
-        offset: offset,
+  Widget build(BuildContext context) {
+    final selectedTag = tag;
+    return IllustGridView(
+      emptyHint: selectedTag != null
+          ? '这个分类下还没有收藏'
+          : restrict == Restrict.private
+          ? '没有私密收藏。可在作品卡片或详情页收藏后切换为私密'
+          : '还没有收藏。可在发现页点卡片左上角收藏按钮添加',
+      keepAlive: true,
+      createPaginator: (api) => Paginator<Illust>(
+        first: () =>
+            api.bookmark.illusts(userId, restrict: restrict, tag: selectedTag),
+        byNextUrl: api.illust.nextIllusts,
+        // 带 tag 筛选时 next_url 会失效或返回重复，必须靠 offset 兜底。
+        byOffset: (offset) => api.bookmark.illustsByOffset(
+          userId,
+          restrict: restrict,
+          tag: selectedTag,
+          offset: offset,
+        ),
+        idOf: (item) => item.id,
       ),
-      idOf: (item) => item.id,
+    );
+  }
+}
+
+/// 发现页的分区切换。
+class _DiscoverChips extends StatelessWidget {
+  const _DiscoverChips({
+    required this.selected,
+    required this.onSelected,
+    this.includeMypixiv = true,
+  });
+
+  final DiscoverSection selected;
+  final ValueChanged<DiscoverSection> onSelected;
+  final bool includeMypixiv;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final section in DiscoverSection.values)
+            if (section != DiscoverSection.mypixiv || includeMypixiv) ...[
+              ChoiceChip(
+                label: Text(section.label),
+                selected: section == selected,
+                onSelected: (_) => onSelected(section),
+              ),
+              const SizedBox(width: 8),
+            ],
+        ],
+      ),
     ),
   );
 }

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../app/providers.dart';
 import '../../data/db/app_database.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
-import '../illust/illust_detail_page.dart';
 
 class BrowseHistoryPage extends ConsumerWidget {
   const BrowseHistoryPage({super.key});
@@ -111,18 +111,8 @@ class _HistoryTile extends ConsumerWidget {
             ref.read(browseHistoryRepositoryProvider).remove(item.id),
       ),
       onTap: isNovel
-          ? () => ref
-                .read(operationFeedbackProvider)
-                .info(
-                  key: 'novel-unavailable',
-                  title: '小说阅读页尚未接入',
-                  message: '当前只能保留小说浏览记录。',
-                )
-          : () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => IllustDetailPage(illustId: item.contentId),
-              ),
-            ),
+          ? () => AppNavigator.openNovel(context, item.contentId)
+          : () => AppNavigator.openIllust(context, item.contentId),
     );
   }
 

@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../app/providers.dart';
 import '../../data/auth/auth_state.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
-import '../download/downloads_page.dart';
-import '../user/following_list.dart';
-import '../user/user_page.dart';
-import 'account_info_page.dart';
-import '../history/browse_history_page.dart';
 import '../mute/mute_settings_page.dart';
-import '../settings/settings_page.dart';
+import '../user/following_list.dart';
+import 'account_info_page.dart';
 
 class PersonalHubPage extends ConsumerWidget {
   const PersonalHubPage({super.key});
@@ -60,14 +57,14 @@ class PersonalHubPage extends ConsumerWidget {
                         icon: const Icon(Icons.person_outline),
                         label: const Text('个人主页'),
                         onPressed: () =>
-                            _push(context, UserPage(userId: account.userId)),
+                            AppNavigator.openUser(context, account.userId),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.badge_outlined),
                         label: const Text('账号信息'),
                         onPressed: () =>
-                            _push(context, const AccountInfoPage()),
+                            AppNavigator.push(context, const AccountInfoPage()),
                       ),
                     ],
                   ),
@@ -97,36 +94,57 @@ class PersonalHubPage extends ConsumerWidget {
                     icon: Icons.people_outline,
                     title: '关注画师',
                     subtitle: '公开与私密关注的画师列表',
-                    onTap: () => _push(
+                    onTap: () => AppNavigator.push(
                       context,
                       FollowingListPage(userId: account.userId),
                     ),
                   ),
+                if (account != null)
+                  _HubTile(
+                    icon: Icons.notifications_none,
+                    title: '通知',
+                    subtitle: '收藏、关注与评论动态',
+                    onTap: () => AppNavigator.openNotifications(context),
+                  ),
+                if (account != null)
+                  _HubTile(
+                    icon: Icons.bookmark_added_outlined,
+                    title: '追更',
+                    subtitle: '追更的连载漫画与小说',
+                    onTap: () => AppNavigator.openWatchlist(context),
+                  ),
+                _HubTile(
+                  icon: Icons.menu_book_outlined,
+                  title: '小说',
+                  subtitle: '推荐、排行榜、关注与好P友',
+                  onTap: () => AppNavigator.openNovelList(context),
+                ),
                 _HubTile(
                   icon: Icons.history,
                   title: '浏览历史',
                   subtitle: '本机最近查看的作品，最多保留 500 条',
                   trailing: historyCount == null ? null : '$historyCount 条',
-                  onTap: () => _push(context, const BrowseHistoryPage()),
+                  onTap: () => AppNavigator.openBrowseHistory(context),
                 ),
                 _HubTile(
                   icon: Icons.visibility_off_outlined,
                   title: '过滤词与屏蔽名单',
                   subtitle: '标签、通配符、正则、画师和作品',
                   trailing: '$muteCount 条',
-                  onTap: () => _push(context, const MuteSettingsPage()),
+                  onTap: () =>
+                      AppNavigator.push(context, const MuteSettingsPage()),
                 ),
                 _HubTile(
                   icon: Icons.download_outlined,
                   title: '下载管理',
                   subtitle: '查看任务、进度和保存位置；失败时优先检查代理',
-                  onTap: () => _push(context, const DownloadsPage()),
+                  onTap: () => AppNavigator.openDownloads(context),
                 ),
                 _HubTile(
                   icon: Icons.settings_outlined,
                   title: '设置',
                   subtitle: '账号、主题、语言、代理与连通性说明',
-                  onTap: () => _push(context, const SettingsPage()),
+                  onTap: () => AppNavigator.openSettings(context),
                 ),
               ],
             ),
@@ -134,10 +152,6 @@ class PersonalHubPage extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  void _push(BuildContext context, Widget page) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
   }
 }
 

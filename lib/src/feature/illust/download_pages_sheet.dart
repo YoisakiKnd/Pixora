@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/operation_feedback.dart';
-import '../download/downloads_page.dart';
 
 /// 分P下载选择弹窗：勾选要下载的分页并加入下载队列。
 ///
@@ -132,18 +132,14 @@ Future<void> _enqueueSelected(
         title: '已加入下载队列',
         message: '$added 张原图',
         actionLabel: '查看',
-        onAction: () => navigator.push(
-          MaterialPageRoute(builder: (_) => const DownloadsPage()),
-        ),
+        onAction: () => AppNavigator.openDownloadsState(navigator),
       );
     } else {
       feedback.info(
         key: 'download-pages',
         title: '所选分页已在下载队列或已经完成',
         actionLabel: '查看',
-        onAction: () => navigator.push(
-          MaterialPageRoute(builder: (_) => const DownloadsPage()),
-        ),
+        onAction: () => AppNavigator.openDownloadsState(navigator),
       );
     }
   } catch (error) {

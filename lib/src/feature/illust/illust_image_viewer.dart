@@ -2,11 +2,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
-import '../download/downloads_page.dart';
 import 'download_pages_sheet.dart';
 
 /// 点击作品图后的全屏查看器：双指缩放原图、左右翻页、下载当前单P，
@@ -72,18 +72,14 @@ class _IllustImageViewerState extends ConsumerState<IllustImageViewer> {
           title: '已加入下载队列',
           message: _pageCount > 1 ? '第 ${_currentPage + 1} 页原图' : '原图',
           actionLabel: '查看',
-          onAction: () => navigator.push(
-            MaterialPageRoute(builder: (_) => const DownloadsPage()),
-          ),
+          onAction: () => AppNavigator.openDownloadsState(navigator),
         );
       } else {
         feedback.info(
           key: 'download-viewer',
           title: '该页已在下载队列或已经完成',
           actionLabel: '查看',
-          onAction: () => navigator.push(
-            MaterialPageRoute(builder: (_) => const DownloadsPage()),
-          ),
+          onAction: () => AppNavigator.openDownloadsState(navigator),
         );
       }
     } catch (error) {

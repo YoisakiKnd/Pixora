@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../app/app_navigator.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../platform/url_launcher_browser.dart';
@@ -10,12 +13,12 @@ import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/progressive_pixiv_image.dart';
 import '../../widget/user_hint.dart';
-import '../download/downloads_page.dart';
 import '../search/search_page.dart';
 import '../user/follow_button.dart';
 import '../user/user_page.dart';
 import 'bookmark_toggle.dart';
 import 'download_pages_sheet.dart';
+import 'illust_comments_section.dart';
 import 'illust_grid.dart';
 import 'illust_image_viewer.dart';
 import 'ugoira_player.dart';
@@ -35,6 +38,9 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
   Illust? _illust;
   Object? _error;
   bool _preparingDownload = false;
+
+  /// 系列上下文（上一话 / 下一话）。无系列作品保持 null。
+  IllustSeriesContext? _seriesContext;
   final _scrollController = ScrollController();
   late final Paginator<Illust> _relatedPaginator;
   bool _relatedInitialLoading = true;
@@ -123,8 +129,27 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
             thumbnailUrl: merged.imageUrls.thumbnail,
           );
       if (mounted) setState(() => _illust = merged);
+      // 只有确实属于某个系列的作品才请求上下文。
+      // 对无系列作品调用 `/v1/illust-series/illust` 会报「指定的系列不存在」，
+      // 报错信息误导性很强，靠 series 字段提前挡掉。
+      if (merged.series != null) {
+        unawaited(_loadSeriesContext(merged.id));
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e);
+    }
+  }
+
+  Future<void> _loadSeriesContext(int illustId) async {
+    try {
+      final context = await ref
+          .read(pixivApiProvider)
+          .illust
+          .seriesContext(illustId);
+      if (!mounted || _illust?.id != illustId) return;
+      setState(() => _seriesContext = context);
+    } catch (_) {
+      // 系列上下文是增强信息，失败静默 —— 不能因为它拉不到就影响详情页。
     }
   }
 
@@ -158,18 +183,14 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
           title: '已加入下载队列',
           message: '$added 张原图',
           actionLabel: '查看',
-          onAction: () => navigator.push(
-            MaterialPageRoute(builder: (_) => const DownloadsPage()),
-          ),
+          onAction: () => AppNavigator.openDownloadsState(navigator),
         );
       } else {
         feedback.info(
           key: 'download-prepare',
           title: '已在下载队列或已经完成',
           actionLabel: '查看',
-          onAction: () => navigator.push(
-            MaterialPageRoute(builder: (_) => const DownloadsPage()),
-          ),
+          onAction: () => AppNavigator.openDownloadsState(navigator),
         );
       }
     } catch (error) {
@@ -498,6 +519,11 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
               ),
             ]),
           ),
+          // 评论区放在相关作品之前：用户看完作品正文后最先想看的是讨论。
+          // 系列导航：属于系列的作品才显示，方便连续阅读。
+          if (_seriesContext case final context?)
+            SliverToBoxAdapter(child: _SeriesNavigation(context: context)),
+          SliverToBoxAdapter(child: IllustCommentsSection(illustId: illust.id)),
           ..._buildRelatedSlivers(),
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
@@ -792,4 +818,84 @@ class _Stat extends StatelessWidget {
       Text('$value', style: Theme.of(context).textTheme.bodySmall),
     ],
   );
+}
+
+/// 系列导航条：显示「第 N 话」并提供上一话 / 下一话 / 从头看。
+///
+/// `seriesContext` 此前没有 UI 入口 —— 连载作品只能靠用户自己回作者主页翻。
+class _SeriesNavigation extends ConsumerWidget {
+  const _SeriesNavigation({required this.context});
+
+  final IllustSeriesContext context;
+
+  @override
+  Widget build(BuildContext context_, WidgetRef ref) {
+    final theme = Theme.of(context_);
+    final detail = context.detail;
+    final previous = context.previous;
+    final next = context.next;
+
+    void open(Illust illust) {
+      ref.read(objectPoolProvider).illusts.put(illust);
+      // 用 pushReplacement 而不是 push：连续翻话时不该在栈里堆一长串详情页。
+      Navigator.of(context_).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => IllustDetailPage(illustId: illust.id),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_stories_outlined, size: 18),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      detail.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+                  Text(
+                    '第 ${context.contentOrder} 话 / 共 ${detail.workCount} 话',
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: previous == null ? null : () => open(previous),
+                      icon: const Icon(Icons.chevron_left, size: 18),
+                      label: const Text('上一话'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: next == null ? null : () => open(next),
+                      icon: const Icon(Icons.chevron_right, size: 18),
+                      label: const Text('下一话'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
