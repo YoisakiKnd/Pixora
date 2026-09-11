@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/paging/paged_list_controller.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/app_navigator.dart';
 import '../../app/providers.dart';
@@ -372,13 +373,24 @@ class _NovelGrid extends ConsumerStatefulWidget {
 
 class _NovelGridState extends ConsumerState<_NovelGrid>
     with AutomaticKeepAliveClientMixin {
-  final _items = <Novel>[];
-  final _seen = <int>{};
   final _scrollController = ScrollController();
-  bool _loading = false;
-  bool _started = false;
-  bool _hasMore = true;
-  Object? _error;
+
+  /// 小说列表统一用 offset 翻页：推荐的 next_url 会带一长串 already_recommended，
+  /// 按 offset 推进更稳定；排行榜 / 关注 / 好P友 本就只认 offset。
+  late final _paged = PagedListController<Novel>(
+    strategy: PagingStrategy.offset,
+    idOf: (novel) => novel.id,
+    fetch: ({required offset, nextUrl}) {
+      final api = ref.read(pixivApiProvider).novel;
+      final cursor = offset == 0 ? null : offset;
+      return switch (widget.source) {
+        _NovelSource.recommended => api.recommended(offset: cursor),
+        _NovelSource.ranking => api.ranking(offset: cursor),
+        _NovelSource.follow => api.followTimeline(offset: cursor),
+        _NovelSource.mypixiv => api.mypixiv(offset: cursor),
+      };
+    },
+  );
 
   @override
   bool get wantKeepAlive => true;
@@ -386,96 +398,49 @@ class _NovelGridState extends ConsumerState<_NovelGrid>
   @override
   void initState() {
     super.initState();
+    _paged.addListener(_onPagedChanged);
     _scrollController.addListener(_onScroll);
-    _load();
+    _paged.refresh().catchError((_) {});
   }
 
   @override
   void dispose() {
+    _paged.removeListener(_onPagedChanged);
+    _paged.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onPagedChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 500) {
-      _loadMore();
-    }
-  }
-
-  Future<PageResponse<Novel>> _fetch(int? offset) {
-    final api = ref.read(pixivApiProvider).novel;
-    return switch (widget.source) {
-      _NovelSource.recommended => api.recommended(offset: offset),
-      _NovelSource.ranking => api.ranking(offset: offset),
-      _NovelSource.follow => api.followTimeline(offset: offset),
-      _NovelSource.mypixiv => api.mypixiv(offset: offset),
-    };
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = await _fetch(null);
-      if (!mounted) return;
-      setState(() {
-        _items.clear();
-        _seen.clear();
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _hasMore = page.hasMore;
-        _started = true;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
-    try {
-      final page = await _fetch(_items.length);
-      if (!mounted) return;
-      setState(() {
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _hasMore = page.hasMore;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      _paged.loadMore().catchError((_) => false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_loading && !_started) {
+    final items = _paged.items;
+    if (_paged.isLoading && !_paged.hasStarted) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null && _items.isEmpty) {
+    if (_paged.error != null && items.isEmpty) {
       return UserHint(
         icon: Icons.cloud_off_outlined,
         title: '加载失败',
-        body: operationErrorMessage(_error!),
+        body: operationErrorMessage(_paged.error!),
         actionLabel: '重试',
-        onAction: _load,
+        onAction: () => _paged.refresh().catchError((_) {}),
         tone: UserHintTone.warning,
       );
     }
-    if (_items.isEmpty) {
+    if (items.isEmpty) {
       return const UserHint(
         icon: Icons.menu_book_outlined,
         title: '暂无小说',
@@ -483,12 +448,12 @@ class _NovelGridState extends ConsumerState<_NovelGrid>
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _paged.refresh().catchError((_) {}),
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(12),
-        itemCount: _items.length,
-        itemBuilder: (context, index) => _NovelTile(novel: _items[index]),
+        itemCount: items.length,
+        itemBuilder: (context, index) => _NovelTile(novel: items[index]),
       ),
     );
   }
