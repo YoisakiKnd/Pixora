@@ -229,118 +229,138 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
     final theme = Theme.of(context);
     final currentUserId = ref.watch(currentUserIdProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Row(
-            children: [
-              Text(
-                _total == null ? '评论' : '评论 · $_total',
-                style: theme.textTheme.titleSmall,
-              ),
-              const Spacer(),
-              if (_loading && _started)
-                const SizedBox.square(
-                  dimension: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+    // 返回 sliver 而非 box：评论区嵌在详情页的 CustomScrollView 里，
+    // 用 SliverList.builder 才能懒构建 —— 之前是 Column + for，评论一多
+    // 每次 setState（如展开楼中楼）都会重建全部已加载评论。
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(
+              children: [
+                Text(
+                  _total == null ? '评论' : '评论 · $_total',
+                  style: theme.textTheme.titleSmall,
                 ),
-            ],
+                const Spacer(),
+                if (_loading && _started)
+                  const SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
           ),
         ),
         if (_error != null && _items.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: UserHint(
-              compact: true,
-              icon: Icons.cloud_off_outlined,
-              title: '评论加载失败',
-              body: operationErrorMessage(_error!),
-              actionLabel: '重试',
-              onAction: _load,
-              tone: UserHintTone.warning,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: UserHint(
+                compact: true,
+                icon: Icons.cloud_off_outlined,
+                title: '评论加载失败',
+                body: operationErrorMessage(_error!),
+                actionLabel: '重试',
+                onAction: _load,
+                tone: UserHintTone.warning,
+              ),
             ),
           )
         else if (_items.isEmpty && _started)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('还没有评论，来抢沙发吧', style: TextStyle(fontSize: 13)),
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('还没有评论，来抢沙发吧', style: TextStyle(fontSize: 13)),
+            ),
           )
         else
-          for (final comment in _items)
-            _CommentTile(
-              comment: comment,
-              canDelete:
-                  currentUserId != null && comment.user.id == currentUserId,
-              onReply: () => setState(() => _replyTo = comment.id),
-              onDelete: () => _delete(comment),
-            ),
+          SliverList.builder(
+            itemCount: _items.length,
+            itemBuilder: (context, index) {
+              final comment = _items[index];
+              return _CommentTile(
+                key: ValueKey(comment.id),
+                comment: comment,
+                canDelete:
+                    currentUserId != null && comment.user.id == currentUserId,
+                onReply: () => setState(() => _replyTo = comment.id),
+                onDelete: () => _delete(comment),
+              );
+            },
+          ),
         if (_hasMore && _items.isNotEmpty)
-          Center(
-            child: TextButton(
-              onPressed: _loading ? null : _loadMore,
-              child: const Text('加载更多评论'),
+          SliverToBoxAdapter(
+            child: Center(
+              child: TextButton(
+                onPressed: _loading ? null : _loadMore,
+                child: const Text('加载更多评论'),
+              ),
             ),
           ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_replyTo != null)
+        const SliverToBoxAdapter(child: Divider(height: 1)),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_replyTo != null)
+                  Row(
+                    children: [
+                      Text('正在回复 #$_replyTo', style: theme.textTheme.bodySmall),
+                      TextButton(
+                        onPressed: () => setState(() => _replyTo = null),
+                        child: const Text('取消'),
+                      ),
+                    ],
+                  ),
                 Row(
                   children: [
-                    Text('正在回复 #$_replyTo', style: theme.textTheme.bodySmall),
-                    TextButton(
-                      onPressed: () => setState(() => _replyTo = null),
-                      child: const Text('取消'),
+                    Expanded(
+                      child: TextField(
+                        controller: _inputController,
+                        enabled: currentUserId != null && !_sending,
+                        maxLines: 3,
+                        minLines: 1,
+                        decoration: InputDecoration(
+                          hintText: currentUserId == null
+                              ? '登录后可发表评论'
+                              : '说点什么…',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: '表情贴纸',
+                      onPressed: currentUserId == null || _loadingStamps
+                          ? null
+                          : _openStamps,
+                      icon: const Icon(Icons.emoji_emotions_outlined),
+                    ),
+                    IconButton.filled(
+                      tooltip: '发送',
+                      onPressed: currentUserId == null || _sending
+                          ? null
+                          : () {
+                              final text = _inputController.text.trim();
+                              if (text.isEmpty) return;
+                              _send(text: text);
+                            },
+                      icon: _sending
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send),
                     ),
                   ],
                 ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inputController,
-                      enabled: currentUserId != null && !_sending,
-                      maxLines: 3,
-                      minLines: 1,
-                      decoration: InputDecoration(
-                        hintText: currentUserId == null ? '登录后可发表评论' : '说点什么…',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: '表情贴纸',
-                    onPressed: currentUserId == null || _loadingStamps
-                        ? null
-                        : _openStamps,
-                    icon: const Icon(Icons.emoji_emotions_outlined),
-                  ),
-                  IconButton.filled(
-                    tooltip: '发送',
-                    onPressed: currentUserId == null || _sending
-                        ? null
-                        : () {
-                            final text = _inputController.text.trim();
-                            if (text.isEmpty) return;
-                            _send(text: text);
-                          },
-                    icon: _sending
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -351,6 +371,7 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
 /// 单条评论。带 `hasReplies` 时提供「查看 N 条回复」入口，展开后拉取楼中楼。
 class _CommentTile extends ConsumerStatefulWidget {
   const _CommentTile({
+    super.key,
     required this.comment,
     required this.canDelete,
     required this.onReply,
