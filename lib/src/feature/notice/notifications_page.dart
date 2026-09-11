@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
+import '../../data/paging/paged_list_controller.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
@@ -17,58 +18,50 @@ class NotificationsPage extends ConsumerStatefulWidget {
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
-  final _items = <PixivNotification>[];
-  final _seen = <int>{};
-  bool _loading = false;
-  bool _started = false;
-  Object? _error;
+  late final _paged = PagedListController<PixivNotification>(
+    strategy: PagingStrategy.offset,
+    idOf: (item) => item.id,
+    fetch: ({required offset, nextUrl}) => ref
+        .read(pixivApiProvider)
+        .misc
+        .notifications(offset: offset == 0 ? null : offset),
+  );
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _paged.addListener(_onPagedChanged);
+    _paged.refresh().catchError((_) {});
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = await ref.read(pixivApiProvider).misc.notifications();
-      if (!mounted) return;
-      setState(() {
-        _items.clear();
-        _seen.clear();
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _started = true;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  @override
+  void dispose() {
+    _paged.removeListener(_onPagedChanged);
+    _paged.dispose();
+    super.dispose();
+  }
+
+  void _onPagedChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && !_started) {
+    final items = _paged.items;
+    if (_paged.isLoading && !_paged.hasStarted) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null && _items.isEmpty) {
+    if (_paged.error != null && items.isEmpty) {
       return UserHint(
         icon: Icons.cloud_off_outlined,
         title: '加载失败',
-        body: operationErrorMessage(_error!),
+        body: operationErrorMessage(_paged.error!),
         actionLabel: '重试',
-        onAction: _load,
+        onAction: () => _paged.refresh().catchError((_) {}),
         tone: UserHintTone.warning,
       );
     }
-    if (_items.isEmpty) {
+    if (items.isEmpty) {
       return const UserHint(
         icon: Icons.notifications_none,
         title: '暂无通知',
@@ -76,13 +69,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _paged.refresh().catchError((_) {}),
       child: ListView.separated(
         padding: const EdgeInsets.all(12),
-        itemCount: _items.length,
+        itemCount: items.length,
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          final item = _items[index];
+          final item = items[index];
           return Card(
             margin: EdgeInsets.zero,
             child: ListTile(

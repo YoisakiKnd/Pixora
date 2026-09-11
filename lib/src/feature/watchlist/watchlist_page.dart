@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
+import '../../data/paging/paged_list_controller.dart';
 import '../../widget/operation_feedback.dart';
 import '../../widget/pixiv_image.dart';
 import '../../widget/user_hint.dart';
@@ -63,13 +64,20 @@ class _WatchlistList extends ConsumerStatefulWidget {
 
 class _WatchlistListState extends ConsumerState<_WatchlistList>
     with AutomaticKeepAliveClientMixin {
-  final _items = <WatchlistSeries>[];
-  final _seen = <int>{};
   final _scrollController = ScrollController();
-  String? _nextUrl;
-  bool _loading = false;
-  bool _started = false;
-  Object? _error;
+
+  /// 追更端点用 offset 翻页且**不返回 next_url**，必须显式声明策略 ——
+  /// 早期实现按 `next_url == null` 判断到底，导致列表永远停在第一页。
+  late final _paged = PagedListController<WatchlistSeries>(
+    strategy: PagingStrategy.offset,
+    idOf: (series) => series.id,
+    fetch: ({required offset, nextUrl}) {
+      final api = ref.read(pixivApiProvider).misc;
+      return widget.kind == _WatchlistKind.manga
+          ? api.watchlistManga(offset: offset == 0 ? null : offset)
+          : api.watchlistNovel(offset: offset == 0 ? null : offset);
+    },
+  );
 
   @override
   bool get wantKeepAlive => true;
@@ -77,94 +85,49 @@ class _WatchlistListState extends ConsumerState<_WatchlistList>
   @override
   void initState() {
     super.initState();
+    _paged.addListener(_onPagedChanged);
     _scrollController.addListener(_onScroll);
-    _load();
+    _paged.refresh().catchError((_) {});
   }
 
   @override
   void dispose() {
+    _paged.removeListener(_onPagedChanged);
+    _paged.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onPagedChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 400) {
-      _loadMore();
-    }
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final api = ref.read(pixivApiProvider).misc;
-      final page = widget.kind == _WatchlistKind.manga
-          ? await api.watchlistManga()
-          : await api.watchlistNovel();
-      if (!mounted) return;
-      setState(() {
-        _items.clear();
-        _seen.clear();
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _nextUrl = page.nextUrl;
-        _started = true;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadMore() async {
-    final next = _nextUrl;
-    if (next == null || _loading) return;
-    setState(() => _loading = true);
-    try {
-      // 追更接口的翻页靠 offset，不是 next_url；用已加载条数推进。
-      final api = ref.read(pixivApiProvider).misc;
-      final page = widget.kind == _WatchlistKind.manga
-          ? await api.watchlistManga(offset: _items.length)
-          : await api.watchlistNovel(offset: _items.length);
-      if (!mounted) return;
-      setState(() {
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _nextUrl = page.nextUrl;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      _paged.loadMore().catchError((_) => false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_loading && !_started) {
+    final items = _paged.items;
+    if (_paged.isLoading && !_paged.hasStarted) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null && _items.isEmpty) {
+    if (_paged.error != null && items.isEmpty) {
       return UserHint(
         icon: Icons.cloud_off_outlined,
         title: '加载失败',
-        body: operationErrorMessage(_error!),
+        body: operationErrorMessage(_paged.error!),
         actionLabel: '重试',
-        onAction: _load,
+        onAction: () => _paged.refresh().catchError((_) {}),
         tone: UserHintTone.warning,
       );
     }
-    if (_items.isEmpty) {
+    if (items.isEmpty) {
       return UserHint(
         icon: Icons.bookmark_border,
         title: widget.kind == _WatchlistKind.manga ? '还没有追更的漫画' : '还没有追更的小说',
@@ -172,13 +135,13 @@ class _WatchlistListState extends ConsumerState<_WatchlistList>
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _paged.refresh().catchError((_) {}),
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(12),
-        itemCount: _items.length,
+        itemCount: items.length,
         itemBuilder: (context, index) {
-          final item = _items[index];
+          final item = items[index];
           return _WatchlistTile(
             series: item,
             kind: widget.kind,
@@ -198,10 +161,7 @@ class _WatchlistListState extends ConsumerState<_WatchlistList>
         await api.unwatchNovel(series.id);
       }
       if (!mounted) return;
-      setState(() {
-        _items.removeWhere((item) => item.id == series.id);
-        _seen.remove(series.id);
-      });
+      _paged.removeWhere((item) => item.id == series.id);
     } on PixivException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
