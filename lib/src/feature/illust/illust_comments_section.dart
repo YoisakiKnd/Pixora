@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/paging/paged_list_controller.dart';
 import '../../api/pixiv_api.dart';
 import '../../app/providers.dart';
 import '../../widget/operation_feedback.dart';
@@ -22,16 +23,21 @@ class IllustCommentsSection extends ConsumerStatefulWidget {
 }
 
 class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
-  final _items = <PixivComment>[];
-  final _seen = <int>{};
   final _inputController = TextEditingController();
-  bool _loading = false;
-  bool _started = false;
   bool _sending = false;
-  bool _hasMore = true;
-  Object? _error;
   int? _total;
   int? _replyTo;
+
+  /// 评论用 offset 翻页：实测多数作品不返回 next_url，只有评论数超过一页的
+  /// 才给（如 30 条的 `next_url` 带 offset=30）。统一用 offset 更稳。
+  late final _paged = PagedListController<PixivComment>(
+    strategy: PagingStrategy.offset,
+    idOf: (comment) => comment.id,
+    fetch: ({required offset, nextUrl}) => ref
+        .read(pixivApiProvider)
+        .illust
+        .comments(widget.illustId, offset: offset == 0 ? null : offset),
+  );
 
   /// 贴纸按需加载：用户点开表情面板才请求。
   List<Stamp>? _stamps;
@@ -40,65 +46,28 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _paged.addListener(_onPagedChanged);
+    _reload();
   }
 
   @override
   void dispose() {
+    _paged.removeListener(_onPagedChanged);
+    _paged.dispose();
     _inputController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = await ref
-          .read(pixivApiProvider)
-          .illust
-          .comments(widget.illustId);
-      if (!mounted) return;
-      setState(() {
-        _items.clear();
-        _seen.clear();
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _total = page.totalComments;
-        _hasMore = page.hasMore;
-        _started = true;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  void _onPagedChanged() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
+  /// 拉取第一页并同步总数（`total_comments` 只有部分响应带）。
+  Future<void> _reload() async {
     try {
-      final page = await ref
-          .read(pixivApiProvider)
-          .illust
-          .comments(widget.illustId, offset: _items.length);
-      if (!mounted) return;
-      setState(() {
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _hasMore = page.hasMore;
-        _total = page.totalComments ?? _total;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      await _paged.refresh();
+    } catch (_) {
+      // 错误已记在 controller.error，由 build 呈现。
     }
   }
 
@@ -120,7 +89,7 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
       _inputController.clear();
       setState(() => _replyTo = null);
       feedback.success(key: 'comment-send', title: '评论已发送');
-      await _load();
+      await _reload();
     } catch (error) {
       if (!mounted) return;
       feedback.error(
@@ -162,8 +131,7 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
       await ref.read(pixivApiProvider).illust.deleteComment(comment.id);
       if (!mounted) return;
       setState(() {
-        _items.removeWhere((item) => item.id == comment.id);
-        _seen.remove(comment.id);
+        _paged.removeWhere((item) => item.id == comment.id);
       });
       feedback.success(key: 'comment-delete', title: '评论已删除');
     } catch (error) {
@@ -228,6 +196,7 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currentUserId = ref.watch(currentUserIdProvider);
+    final items = _paged.items;
 
     // 返回 sliver 而非 box：评论区嵌在详情页的 CustomScrollView 里，
     // 用 SliverList.builder 才能懒构建 —— 之前是 Column + for，评论一多
@@ -244,7 +213,7 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
                   style: theme.textTheme.titleSmall,
                 ),
                 const Spacer(),
-                if (_loading && _started)
+                if (_paged.isLoading && _paged.hasStarted)
                   const SizedBox.square(
                     dimension: 14,
                     child: CircularProgressIndicator(strokeWidth: 2),
@@ -253,7 +222,7 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
             ),
           ),
         ),
-        if (_error != null && _items.isEmpty)
+        if (_paged.error != null && items.isEmpty)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -261,14 +230,14 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
                 compact: true,
                 icon: Icons.cloud_off_outlined,
                 title: '评论加载失败',
-                body: operationErrorMessage(_error!),
+                body: operationErrorMessage(_paged.error!),
                 actionLabel: '重试',
-                onAction: _load,
+                onAction: _reload,
                 tone: UserHintTone.warning,
               ),
             ),
           )
-        else if (_items.isEmpty && _started)
+        else if (items.isEmpty && _paged.hasStarted)
           const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.all(16),
@@ -277,9 +246,9 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
           )
         else
           SliverList.builder(
-            itemCount: _items.length,
+            itemCount: items.length,
             itemBuilder: (context, index) {
-              final comment = _items[index];
+              final comment = items[index];
               return _CommentTile(
                 key: ValueKey(comment.id),
                 comment: comment,
@@ -290,11 +259,13 @@ class _IllustCommentsSectionState extends ConsumerState<IllustCommentsSection> {
               );
             },
           ),
-        if (_hasMore && _items.isNotEmpty)
+        if (_paged.hasMore && items.isNotEmpty)
           SliverToBoxAdapter(
             child: Center(
               child: TextButton(
-                onPressed: _loading ? null : _loadMore,
+                onPressed: _paged.isLoading
+                    ? null
+                    : () => _paged.loadMore().catchError((_) => false),
                 child: const Text('加载更多评论'),
               ),
             ),

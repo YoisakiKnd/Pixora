@@ -236,80 +236,43 @@ class SpotlightPage extends ConsumerStatefulWidget {
 }
 
 class _SpotlightPageState extends ConsumerState<SpotlightPage> {
-  final _items = <SpotlightArticle>[];
-  final _seen = <int>{};
   final _scrollController = ScrollController();
-  bool _loading = false;
-  bool _started = false;
-  bool _hasMore = true;
-  Object? _error;
+
+  /// 服务层只暴露 offset 参数（虽然响应也带 next_url），故用 offset 策略。
+  late final _paged = PagedListController<SpotlightArticle>(
+    strategy: PagingStrategy.offset,
+    idOf: (article) => article.id,
+    fetch: ({required offset, nextUrl}) => ref
+        .read(pixivApiProvider)
+        .misc
+        .spotlightArticles(offset: offset == 0 ? null : offset),
+  );
 
   @override
   void initState() {
     super.initState();
+    _paged.addListener(_onPagedChanged);
     _scrollController.addListener(_onScroll);
-    _load();
+    _paged.refresh().catchError((_) {});
   }
 
   @override
   void dispose() {
+    _paged.removeListener(_onPagedChanged);
+    _paged.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onPagedChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 400) {
-      _loadMore();
-    }
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = await ref.read(pixivApiProvider).misc.spotlightArticles();
-      if (!mounted) return;
-      setState(() {
-        _items.clear();
-        _seen.clear();
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _hasMore = page.hasMore;
-        _started = true;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
-    try {
-      final page = await ref
-          .read(pixivApiProvider)
-          .misc
-          .spotlightArticles(offset: _items.length);
-      if (!mounted) return;
-      setState(() {
-        for (final item in page.items) {
-          if (_seen.add(item.id)) _items.add(item);
-        }
-        _hasMore = page.hasMore;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      _paged.loadMore().catchError((_) => false);
     }
   }
 
@@ -338,20 +301,21 @@ class _SpotlightPageState extends ConsumerState<SpotlightPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (_loading && !_started) {
+    final items = _paged.items;
+    if (_paged.isLoading && !_paged.hasStarted) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null && _items.isEmpty) {
+    if (_paged.error != null && items.isEmpty) {
       return UserHint(
         icon: Icons.cloud_off_outlined,
         title: '加载失败',
-        body: operationErrorMessage(_error!),
+        body: operationErrorMessage(_paged.error!),
         actionLabel: '重试',
-        onAction: _load,
+        onAction: () => _paged.refresh().catchError((_) {}),
         tone: UserHintTone.warning,
       );
     }
-    if (_items.isEmpty) {
+    if (items.isEmpty) {
       return const UserHint(
         icon: Icons.auto_stories_outlined,
         title: '暂无特辑',
@@ -359,13 +323,13 @@ class _SpotlightPageState extends ConsumerState<SpotlightPage> {
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _paged.refresh().catchError((_) {}),
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(12),
-        itemCount: _items.length,
+        itemCount: items.length,
         itemBuilder: (context, index) {
-          final article = _items[index];
+          final article = items[index];
           return Card(
             margin: const EdgeInsets.only(bottom: 10),
             clipBehavior: Clip.antiAlias,
