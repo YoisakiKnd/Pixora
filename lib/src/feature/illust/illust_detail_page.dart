@@ -521,11 +521,13 @@ class _IllustDetailPageState extends ConsumerState<IllustDetailPage> {
               ),
             ]),
           ),
-          // 评论区放在相关作品之前：用户看完作品正文后最先想看的是讨论。
           // 系列导航：属于系列的作品才显示，方便连续阅读。
           if (_seriesContext case final context?)
             SliverToBoxAdapter(child: _SeriesNavigation(context: context)),
-          SliverToBoxAdapter(child: IllustCommentsSection(illustId: illust.id)),
+          // 评论区自身返回 sliver（SliverMainAxisGroup），**不能**再套
+          // SliverToBoxAdapter —— box adapter 只接受 box widget，套错会让
+          // 它之后的 sliver（相关作品）渲染异常甚至整块消失。
+          IllustCommentsSection(illustId: illust.id),
           ..._buildRelatedSlivers(),
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
